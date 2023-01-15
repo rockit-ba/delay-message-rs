@@ -39,12 +39,12 @@ impl Message {
     }
 
     /// 序列化为 JSON
-    pub fn serialize(&self) -> String {
+    pub fn serialize_json(&self) -> String {
         serde_json::to_string(self).unwrap()
     }
 
     /// 反序列化为 message
-    pub fn deserialize(json: &str) -> Self {
+    pub fn deserialize_json(json: &str) -> Self {
         serde_json::from_str::<Message>(json).unwrap()
     }
 }
@@ -60,10 +60,26 @@ mod tests {
     fn test_json() {
         log_init();
         let json = String::from("{\"msg_len\":40,\"body_crc\":342342,\"physical_offset\":0,\"send_timestamp\":1232432443,\"store_timestamp\":1232432999,\"body_len\":0,\"body\":\"\",\"topic_len\":0,\"topic\":\"\",\"prop_len\":0,\"prop\":\"\"}");
-        let message = Message::deserialize(&json);
+        let message = Message::deserialize_json(&json);
         info!("{:?}", message);
 
-        let string = message.serialize();
+        let string = message.serialize_json();
         info!("{:?}", string);
+    }
+
+    #[test]
+    fn test_word_len() {
+        log_init();
+        let str = "topic_oms";
+        info!("长度-{}", str.as_bytes().len());
+    }
+
+    #[test]
+    fn test_byte() {
+        log_init();
+        let json = String::from("{\"msg_len\":40,\"body_crc\":342342,\"physical_offset\":0,\"send_timestamp\":1232432443,\"store_timestamp\":1232432999,\"body_len\":21,\"body\":\"此情可待成追忆\",\"topic_len\":9,\"topic\":\"topic_oms\",\"prop_len\":0,\"prop\":\"\"}");
+        let message = Message::deserialize_json(&json);
+        let serialized = bincode::serialize(&message).unwrap();
+        info!("长度：{}", serialized.len());
     }
 }

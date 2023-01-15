@@ -6,12 +6,14 @@ edition = "2021"
 [dependencies]
 # 内存映射
 memmap2 = "0.5.8"
-
+# 序列化
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-
+bincode = "1.3.3"
+# 日志
 log = "0.4"
 env_logger = "0.10.0"
+# 时间格式化
 chrono = "0.4.0"
 
 lazy_static = "1.4.0"
