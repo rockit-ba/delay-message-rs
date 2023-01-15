@@ -1,6 +1,6 @@
 //! 消息对象
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 /// 从文件中获取一条消息的方式：
 ///
 /// 根据 读取 一个 u32 的msg_len，然后 读取msg_len长度字节的数据
@@ -34,7 +34,7 @@ pub struct Message {
 
 impl Message {
     /// 消息固定长度大小
-    pub fn fix_len() -> u32{
+    pub fn fix_len() -> u32 {
         40
     }
 
@@ -52,9 +52,9 @@ impl Message {
 #[cfg(test)]
 mod tests {
 
-    use log::{info};
-    use crate::common::log_util::{log_init};
+    use crate::common::log_util::log_init;
     use crate::storage::message::Message;
+    use log::info;
 
     #[test]
     fn test_json() {

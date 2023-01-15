@@ -1,2 +1,2 @@
-mod mmap_writer;
 mod message;
+mod mmap_writer;
