@@ -76,8 +76,11 @@ impl Message {
     }
 
     /// 从文件夹中读取一个message出来
-    pub fn deserialize_binary(file: &mut File) -> Message {
-        let msg_len = file.read_u32::<LittleEndian>().unwrap();
+    pub fn deserialize_binary(file: &mut File) -> Option<Message> {
+        let msg_len = file.read_u32::<LittleEndian>().expect("文件内容非法");
+        if msg_len < Message::fix_len() {
+            return None;
+        }
         let mut buf = Vec::<u8>::with_capacity(msg_len as usize);
         {
             file.by_ref()
@@ -115,7 +118,7 @@ impl Message {
         let (prop, _) = rest.split_at(prop_len as usize);
         let prop = String::from_utf8_lossy(prop).to_string();
 
-        Message {
+        Some(Message {
             msg_len,
             body_crc,
             physical_offset,
@@ -127,7 +130,7 @@ impl Message {
             topic,
             prop_len,
             prop,
-        }
+        })
     }
 }
 

@@ -17,5 +17,7 @@ log = "0.4"
 env_logger = "0.10.0"
 # 时间格式化
 chrono = "0.4.0"
+# 错误处理
+anyhow = "1.0"
 
 lazy_static = "1.4.0"
