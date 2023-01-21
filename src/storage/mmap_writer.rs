@@ -4,15 +4,14 @@ use memmap2::{MmapMut, MmapOptions};
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex};
 
 use lazy_static::lazy_static;
 
 /// 存储文件初始化大小
 const FILE_SIZE: u64 = 1024;
 /// 记录服务正在运行的 mmap 的开始写入的 offset
-static START_OFFSET: AtomicUsize = AtomicUsize::new(0);
+static mut START_OFFSET: usize = 0;
 /// 第一个存储文件的名称
 static INIT_LOG_FILE_NAME: &str = "0";
 
@@ -29,7 +28,7 @@ lazy_static! {
         // 此offset 需要加载文件的时候计算
         // 不同于 START_OFFSET，这里的代表磁盘上开始的写入位置
         let offset = 0;
-        START_OFFSET.store(offset, Ordering::SeqCst);
+        unsafe {START_OFFSET = offset};
         Mutex::new(unsafe { MmapOptions::new().map_mut(&file).unwrap() })
     };
 }
@@ -38,8 +37,10 @@ lazy_static! {
 pub fn write(data: &[u8]) {
     {
         let mut m_map = MMAP_WRITER.lock().unwrap();
-        let start = START_OFFSET.fetch_add(data.len(), Ordering::SeqCst);
-        (&mut m_map[start..]).write_all(data).unwrap();
+        unsafe {
+            (&mut m_map[START_OFFSET..]).write_all(data).unwrap();
+            START_OFFSET += data.len()
+        }
         m_map.flush_async().unwrap();
     }
 }
