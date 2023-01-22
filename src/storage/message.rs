@@ -4,6 +4,9 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Read;
+use crate::common::crc_check_util::{crc32, crc_check};
+
+
 /// 从文件中获取一条消息的方式：
 ///
 /// 根据 读取 一个 u32 的msg_len，然后 读取msg_len长度字节的数据
@@ -50,12 +53,15 @@ impl Message {
         serde_json::to_string(self).unwrap()
     }
 
-    /// 反序列化为 message
+    /// 将客户端网络传输的JSON 反序列化为 message
     pub fn deserialize_json(json: &str) -> Self {
-        serde_json::from_str::<Message>(json).unwrap()
+        let mut msg = serde_json::from_str::<Message>(json).unwrap();
+        // 设置check_sum
+        msg.body_crc = crc32(msg.body.as_bytes());
+        msg
     }
 
-    /// 序列化为字节,使用小端序列化
+    /// 将对象序列化为文件存储的字节编码,使用小端序列化
     pub fn serialize_binary(&self) -> Vec<u8> {
         let mut v = Vec::<u8>::new();
         v.extend(self.msg_len.to_le_bytes());
@@ -74,6 +80,7 @@ impl Message {
         v.extend(self.prop.as_bytes());
         v
     }
+
 
     /// 从文件夹中读取一个message出来
     pub fn deserialize_binary(file: &mut File) -> Option<Message> {
@@ -104,6 +111,7 @@ impl Message {
         let body_len = u32::from_le_bytes(body_len.try_into().unwrap());
 
         let (body, rest) = rest.split_at(body_len as usize);
+        crc_check(body_crc, body);
         let body = String::from_utf8_lossy(body).to_string();
 
         let (topic_len, rest) = rest.split_at(2);

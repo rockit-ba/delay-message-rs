@@ -24,7 +24,7 @@ lazy_static! {
         let mut file = OpenOptions::new()
             .create(true)
             .read(true).write(true)
-            .open(path).expect("打开文件失败");
+            .open(path).expect("打开log文件失败");
 
         file.set_len(FILE_SIZE).expect("文件初始化设置异常");
         // 此offset 需要加载文件的时候计算
