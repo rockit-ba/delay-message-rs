@@ -7,13 +7,14 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use crate::storage::message::Message;
+use crate::storage::start_offset::read;
 use lazy_static::lazy_static;
 use log::{error, info};
 
 /// 存储文件初始化大小
 const FILE_SIZE: u64 = 1024;
 /// 记录服务正在运行的 mmap 的开始写入的 offset
-static mut START_OFFSET: usize = 0;
+pub static mut START_OFFSET: usize = 0;
 /// 第一个存储文件的名称
 static INIT_LOG_FILE_NAME: &str = "0";
 
@@ -29,15 +30,19 @@ lazy_static! {
         file.set_len(FILE_SIZE).expect("文件初始化设置异常");
         // 此offset 需要加载文件的时候计算
         // 不同于 START_OFFSET，这里的代表磁盘上开始的写入位置
+        let offset = read();
+        info!("从 start_offset 文件读取 START_OFFSET：{}", offset);
         let offset = start_offset_init(&mut file);
-        info!("初始化 START_OFFSET：{}", offset);
+        info!("从 log 文件重新计算 START_OFFSET：{}", offset);
 
         unsafe {START_OFFSET = offset};
         Mutex::new(unsafe { MmapOptions::new().map_mut(&file).expect("虚拟内存映射初始化异常") })
     };
 }
 
-/// 初始化log 文件开始写的位置
+/// 初始化log 文件开始写的位置，
+///
+/// 此方法用于
 fn start_offset_init(file: &mut File) -> usize {
     let mut start_offset = 0_usize;
     while let Some(msg) = Message::deserialize_binary(file) {

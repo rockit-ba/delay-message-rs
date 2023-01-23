@@ -1,11 +1,10 @@
 //! 消息对象
 
+use crate::common::crc_check_util::{crc32, crc_check};
 use byteorder::{LittleEndian, ReadBytesExt};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Read;
-use crate::common::crc_check_util::{crc32, crc_check};
-
 
 /// 从文件中获取一条消息的方式：
 ///
@@ -80,7 +79,6 @@ impl Message {
         v.extend(self.prop.as_bytes());
         v
     }
-
 
     /// 从文件夹中读取一个message出来
     pub fn deserialize_binary(file: &mut File) -> Option<Message> {
