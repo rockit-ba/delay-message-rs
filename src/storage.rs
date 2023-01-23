@@ -1,3 +1,4 @@
 mod message;
-pub mod mmap_writer;
+pub mod commit_log;
 mod start_offset;
+mod consume_queue;

@@ -1,6 +1,6 @@
 //! 持久化 start_offset
 
-use crate::storage::mmap_writer::START_OFFSET;
+use crate::storage::commit_log::START_OFFSET;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use lazy_static::lazy_static;
 use log::{error, info};
