@@ -1,4 +1,4 @@
-//! 日志工具
+//! 日志util
 
 use env_logger::Builder;
 use std::io::Write;

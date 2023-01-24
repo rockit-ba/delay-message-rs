@@ -3,9 +3,7 @@
 use crate::common::crc_check_util::{crc32, crc_check};
 use byteorder::{LittleEndian, ReadBytesExt};
 use serde::{Deserialize, Serialize};
-use std::fs::File;
-use std::io::{BufReader, Read, Seek, SeekFrom};
-use log::info;
+use std::io::{BufReader, Read};
 
 /// 从文件中获取一条消息的方式：
 ///

@@ -6,9 +6,9 @@ const CRC_CKSUM: Crc<u32> = Crc::<u32>::new(&CRC_32_CKSUM);
 
 /// 数据正确性校验
 pub fn crc_check(save_crc: u32, data: &[u8]) {
-    let cksum = CRC_CKSUM.checksum(data);
-    if cksum != save_crc {
-        panic!("CRC check failed: curr: {cksum}, old: {save_crc}");
+    let ck_sum = CRC_CKSUM.checksum(data);
+    if ck_sum != save_crc {
+        panic!("CRC check failed: curr: {ck_sum}, old: {save_crc}");
     }
 }
 
