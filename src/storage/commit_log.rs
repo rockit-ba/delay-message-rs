@@ -2,13 +2,14 @@
 use memmap2::{MmapMut, MmapOptions};
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
-use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::{RwLock};
 use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::storage::message::Message;
 use crate::storage::start_offset;
 use crate::cust_error::{CommitLogError, panic};
+use crate::file_util;
 
 use lazy_static::lazy_static;
 use log::{error, info};
@@ -18,15 +19,21 @@ const FILE_SIZE: u64 = 1024;
 /// 记录服务正在运行的 mmap 的开始写入的 offset
 pub static mut START_OFFSET: usize = 0;
 /// 第一个存储文件的名称
-const INIT_LOG_FILE_NAME: &str = "0";
+const INIT_LOG_FILE_NAME: u64 = 0;
+
+const DIR_NAME: &str = "store/commit_log";
+
 
 lazy_static! {
     /// 内存映射可变引用
-    static ref MMAP_WRITER: RwLock<MmapMut> = {
-        let path: PathBuf = PathBuf::from(INIT_LOG_FILE_NAME);
+    static ref MMAP_WRITER: MmapWriter = {
+        let file_name = MmapWriter::init_file_name();
+        let path = std::env::current_dir().expect("获取应用程序目录异常")
+            .join(DIR_NAME).join(file_name.as_str());
         match OpenOptions::new().create(true).read(true).write(true).open(path) {
             Ok(file) => {
-                init_mmap_writer(&file)
+                let writer = init_mmap_writer(&file);
+                MmapWriter {file_name, writer}
             },
             Err(err) => {
                 let err = CommitLogError::OpenErr(err.to_string());
@@ -34,6 +41,24 @@ lazy_static! {
             }
         }
     };
+}
+
+/// commit_log 写对象
+struct MmapWriter {
+    file_name: String,
+    writer: RwLock<MmapMut>,
+}
+impl MmapWriter {
+    /// 初始化写文件的名称
+    fn init_file_name() -> String {
+        let path = std::env::current_dir().expect("获取应用程序目录异常")
+            .join(DIR_NAME);
+        let sort = file_util::get_all_files(&path)
+            .iter()
+            .map(|ele| u64::from_str(ele.file_name().to_str().unwrap()).unwrap())
+            .collect::<Vec<_>>();
+        sort.last().copied().unwrap_or(INIT_LOG_FILE_NAME).to_string()
+    }
 }
 
 fn init_mmap_writer(file: &File) -> RwLock<MmapMut>{
@@ -54,8 +79,7 @@ fn init_mmap_writer(file: &File) -> RwLock<MmapMut>{
         match MmapOptions::new().map_mut(file) {
             Ok(result) => result,
             Err(err) => {
-                let err = CommitLogError::MmapErr(err.to_string());
-                panic(err.to_string().as_str())
+                panic(CommitLogError::MmapErr(err.to_string()).to_string().as_str())
             }
         }
     })
@@ -83,14 +107,16 @@ fn real_start_offset(file: &File, stored_offset: usize) -> usize {
 }
 
 
-/// offset 读取的位置
+/// 根据queue_consume 读取一个消息
 ///
-/// size 读取的长度
+/// offset  读取的位置
+///
+/// size    读取的长度
 pub fn read(offset: u64, size: u32) -> Vec<u8>{
     let start = offset as usize;
     let len = (offset + size as u64) as usize;
     {
-        let m_map = MMAP_WRITER.read().unwrap();
+        let m_map = MMAP_WRITER.writer.read().unwrap();
         let data = &m_map[start..len];
         data.to_vec()
     }
@@ -99,18 +125,16 @@ pub fn read(offset: u64, size: u32) -> Vec<u8>{
 /// 写数据
 pub fn write(data: &[u8]) {
     {
-        let mut m_map = MMAP_WRITER.write().unwrap();
+        let mut m_map = MMAP_WRITER.writer.write().unwrap();
         unsafe {
-            let buf = &mut m_map[START_OFFSET..];
+            let mut buf = &mut m_map[START_OFFSET..];
             if buf.len() < data.len() {
                 info!("当前commit_log文件已满，开始创建新的文件");
                 // todo
+
                 return;
             }
-            if let Err(err) = (&mut m_map[START_OFFSET..]).write_all(data) {
-                error!("{:?}", err);
-                return;
-            }
+            buf.write_all(data).unwrap();
             START_OFFSET += data.len();
         }
         if let Err(err) = m_map.flush_async() {
@@ -141,5 +165,12 @@ mod tests {
         let x2 = message2.as_slice();
         info!("{}", x.len());
         write(x2);
+    }
+
+    #[test]
+    fn sys_root_test() {
+        log_init();
+        let string = format!("{:?}", std::env::current_dir().expect("获取应用程序目录异常").as_os_str());
+        info!("{string}");
     }
 }
