@@ -4,6 +4,8 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use memmap2::{MmapMut, MmapOptions};
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
+use std::mem;
+use std::ops::{DerefMut};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::RwLock;
@@ -17,7 +19,7 @@ use lazy_static::lazy_static;
 use log::{error, info};
 
 /// 存储文件初始化大小
-const FILE_SIZE: u64 = 1024;
+const FILE_SIZE: u64 = 200;
 /// 第一个存储文件的名称
 const INIT_LOG_FILE_NAME: u64 = 0;
 /// 文件存储目录
@@ -34,7 +36,7 @@ lazy_static! {
 pub struct MmapWriter {
     // 记录服务正在运行的 mmap 的开始写入的 offset
     start_offset: AtomicUsize,
-    file_name: String,
+    file_name: RwLock<String>,
     writer: RwLock<MmapMut>,
 }
 impl MmapWriter {
@@ -64,7 +66,7 @@ impl MmapWriter {
                 let (writer, start_offset) = MmapWriter::writer_create(&file);
                 MmapWriter {
                     start_offset,
-                    file_name: file_name_,
+                    file_name: RwLock::new(file_name_),
                     writer,
                 }
             }
@@ -128,17 +130,42 @@ impl MmapWriter {
         {
             let mut m_map = self.writer.write().unwrap();
             let mut buf = &mut m_map[self.start_offset.load(Ordering::SeqCst)..];
-            if buf.len() < data.len() {
-                info!("当前commit_log文件已满，开始创建新的文件");
-                // todo
 
+            {
+                info!("当前文件[{}]剩余：{},当前数据大小：{}",self.file_name.read().unwrap().to_string(),buf.len(), data.len());
+            }
+            if buf.len() > data.len() {
+                buf.write_all(data).unwrap();
+                self.start_offset.fetch_add(data.len(), Ordering::SeqCst);
+                if let Err(err) = m_map.flush_async() {
+                    error!("log文件 flush_async 异常：{:?}", err);
+                }
                 return;
             }
-            buf.write_all(data).unwrap();
-            self.start_offset.fetch_add(data.len(), Ordering::SeqCst);
-            if let Err(err) = m_map.flush_async() {
-                error!("log文件 flush_async 异常：{:?}", err);
-            }
+        }
+
+        self.new_writer_create();
+        {
+            info!("新文件名：{:?}", self.file_name.read().unwrap().to_string());
+        }
+        self.write(data);
+    }
+
+    /// 当前commit_log文件已满，开始创建新的文件
+    fn new_writer_create(&self) {
+        info!("当前commit_log文件已满，开始创建新的文件");
+        self.start_offset.store(0, Ordering::SeqCst);
+        let curr;
+        {
+            let name = self.file_name.read().unwrap().clone();
+            curr = u64::from_str(name.as_str()).unwrap();
+        }
+        let new_writer = Self::new(Some((curr + FILE_SIZE).to_string().as_str()));
+        {
+            *self.file_name.write().unwrap() = new_writer.file_name.read().unwrap().to_string();
+            let mut old = self.writer.write().unwrap();
+            let mut new = new_writer.writer.write().unwrap();
+            mem::swap(old.deref_mut(), new.deref_mut());
         }
     }
 }
@@ -192,16 +219,14 @@ mod tests {
     #[test]
     fn test_01_write_message() {
         log_init();
-        let json = String::from("{\"msg_len\":66,\"body_crc\":342342,\"physical_offset\":0,\"send_timestamp\":1232432443,\"store_timestamp\":1232432999,\"body_len\":21,\"body\":\"此情可待成追忆\",\"topic_len\":9,\"topic\":\"topic_oms\",\"prop_len\":0,\"prop\":\"\"}");
+        let json = String::from("{\"msg_len\":66,\"body_crc\":342342,\"physical_offset\":0,\"send_timestamp\":1232432443,\"store_timestamp\":1232432999,\"body_len\":21,\"body\":\"此情可待成追追\",\"topic_len\":9,\"topic\":\"topic_oms\",\"prop_len\":0,\"prop\":\"\"}");
         let message = Message::deserialize_json(&json).serialize_binary();
         let x = message.as_slice();
-        info!("{}", x.len());
         MMAP_WRITER.write(x);
 
-        let json2 = String::from("{\"msg_len\":66,\"body_crc\":342342,\"physical_offset\":0,\"send_timestamp\":1232432443,\"store_timestamp\":1232432999,\"body_len\":21,\"body\":\"只是当时已惘然\",\"topic_len\":9,\"topic\":\"topic_oms\",\"prop_len\":0,\"prop\":\"\"}");
+        let json2 = String::from("{\"msg_len\":66,\"body_crc\":342342,\"physical_offset\":0,\"send_timestamp\":1232432443,\"store_timestamp\":1232432999,\"body_len\":21,\"body\":\"只是当时已茫茫\",\"topic_len\":9,\"topic\":\"topic_oms\",\"prop_len\":0,\"prop\":\"\"}");
         let message2 = Message::deserialize_json(&json2).serialize_binary();
         let x2 = message2.as_slice();
-        info!("{}", x.len());
         MMAP_WRITER.write(x2);
     }
 
