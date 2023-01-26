@@ -1,11 +1,12 @@
 //! commit_log 文件模块
 
 use byteorder::{LittleEndian, ReadBytesExt};
-use memmap2::{MmapMut, MmapOptions};
-use std::fs::{File, OpenOptions};
+use memmap2::{Mmap, MmapMut, MmapOptions};
+use std::fs::{DirEntry, File, OpenOptions};
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::mem;
 use std::ops::{DerefMut};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::RwLock;
@@ -26,8 +27,9 @@ const INIT_LOG_FILE_NAME: &str = "00000000000000000000";
 const DIR_NAME: &str = "store/commit_log";
 
 lazy_static! {
-    /// 内存映射writer
+    /// writer
     pub static ref MMAP_WRITER: MmapWriter = MmapWriter::new(None);
+    static ref MMAP_READERS: Vec<MmapReader> = MmapReader::init_readers();
 }
 
 /// commit_log 写对象
@@ -50,10 +52,7 @@ impl MmapWriter {
         };
         info!("当前 write file name：{file_name_}");
 
-        let path = std::env::current_dir()
-            .expect("获取应用目录异常")
-            .join(DIR_NAME)
-            .join(file_name_.as_str());
+        let path = file_path().join(file_name_.as_str());
 
         match OpenOptions::new()
             .create(true)
@@ -78,11 +77,7 @@ impl MmapWriter {
 
     /// 初始化写文件的名称
     fn file_name_create() -> String {
-        let path = std::env::current_dir()
-            .expect("获取应用程序目录异常")
-            .join(DIR_NAME);
-        let mut files = file_util::get_all_files(&path);
-        files.sort_by_key(|file| file.file_name());
+        let files = sorted_commit_log_files();
         files.iter()
             .map(|file| file.file_name().to_str().unwrap().to_string())
             .last()
@@ -100,7 +95,7 @@ impl MmapWriter {
         info!("从 start_offset 文件读取 START_OFFSET：{}", offset);
 
         // 为了防止异常情况下最后的offset值没有写入 start_offset  文件，增量继续获取真实的offset
-        let offset = real_start_offset(file, offset);
+        let offset = Self::real_start_offset(file, offset);
         info!("从 log 文件重新计算 START_OFFSET：{}", offset);
 
         (
@@ -163,49 +158,125 @@ impl MmapWriter {
             mem::swap(old.deref_mut(), new.deref_mut());
         }
     }
-}
 
-/// 初始化log 文件真实的开始写的位置
-/// stored_offset：从start_offset文件获取的最后写入的值
-fn real_start_offset(file: &File, stored_offset: usize) -> usize {
-    let mut real_offset = stored_offset;
-    let mut reader = BufReader::new(file);
-    reader.seek(SeekFrom::Start(real_offset as u64)).unwrap();
-    // 注意，这里已经游标走出4个
-    while let Ok(size) = reader.read_u32::<LittleEndian>() {
-        if size < Message::mix_len() {
-            break;
+    /// 初始化log 文件真实的开始写的位置
+    /// stored_offset：从start_offset文件获取的最后写入的值
+    fn real_start_offset(file: &File, stored_offset: usize) -> usize {
+        let mut real_offset = stored_offset;
+        let mut reader = BufReader::new(file);
+        reader.seek(SeekFrom::Start(real_offset as u64)).unwrap();
+        // 注意，这里已经游标走出4个
+        while let Ok(size) = reader.read_u32::<LittleEndian>() {
+            if size < Message::mix_len() {
+                break;
+            }
+
+            let mut data = vec![0u8; size as usize];
+            reader.read_exact(&mut data).unwrap();
+            if let Some(msg) = Message::deserialize_binary(&mut data, size) {
+                info!("重新计算解析消息：{:?}", &msg);
+                real_offset += msg.msg_len() as usize;
+            };
         }
-
-        let mut data = vec![0u8; size as usize];
-        reader.read_exact(&mut data).unwrap();
-        if let Some(msg) = Message::deserialize_binary(&mut data, size) {
-            info!("重新计算解析消息：{:?}", &msg);
-            real_offset += msg.msg_len() as usize;
-        };
+        real_offset
     }
-    real_offset
 }
 
-/// 根据queue_consume 读取一个消息
-///
-/// offset  读取的位置
-///
-/// size    读取的长度
-pub fn read(offset: u64, size: u32) -> Vec<u8> {
-    let start = offset as usize;
-    let len = (offset + size as u64) as usize;
-    {
-        let m_map = MMAP_WRITER.writer.read().unwrap();
-        let data = &m_map[start..len];
+
+/// commit_log read 对象
+pub struct MmapReader {
+    file_name: String,
+    reader: Mmap,
+}
+impl MmapReader {
+    /// 创建
+    fn new(file_name: &str, reader: Mmap) -> MmapReader {
+        MmapReader { file_name: file_name.to_string(), reader }
+    }
+    /// 初始化所有 commit_log 文件的读取对象
+    fn init_readers() -> Vec<MmapReader> {
+        let log_files = sorted_commit_log_files();
+        let mut vec = Vec::<MmapReader>::new();
+        if log_files.is_empty() {
+            Self::empty_reader_process(&mut vec);
+        }
+        else {
+            Self::not_empty_reader_process(log_files, &mut vec);
+        }
+        vec
+    }
+
+    /// 存在 log 文件的处理方式
+    fn not_empty_reader_process(log_files: Vec<DirEntry>, vec: &mut Vec<MmapReader>) {
+        log_files.iter().for_each(|ele| {
+            let path = file_path().join(ele.file_name().to_str().unwrap());
+            match OpenOptions::new().read(true).open(path)
+            {
+                Ok(file) => {
+                    let ele = Self::new(ele.file_name().to_str().unwrap(),
+                                        unsafe { MmapOptions::new().map(&file).unwrap() });
+                    vec.push(ele);
+                }
+                Err(err) => {
+                    let err = CommitLogError::OpenErr(err.to_string());
+                    panic(err.to_string().as_str())
+                }
+            }
+        });
+    }
+
+    /// 如果目录中log 文件为空时的处理
+    fn empty_reader_process(vec: &mut Vec<MmapReader>) {
+        let path = file_path().join(INIT_LOG_FILE_NAME);
+        match OpenOptions::new().create(true).read(true).open(path)
+        {
+            Ok(file) => {
+                vec.push(Self::new(INIT_LOG_FILE_NAME,
+                                   unsafe { MmapOptions::new().map(&file).unwrap() }
+                ));
+            }
+            Err(err) => {
+                let err = CommitLogError::OpenErr(err.to_string());
+                panic(err.to_string().as_str())
+            }
+        }
+    }
+
+    /// 根据queue_consume 读取一个消息
+    ///
+    /// offset  log 文件物理位置偏移
+    ///
+    /// size    读取的长度
+    pub fn read(offset: u64, size: u32) -> Vec<u8> {
+        // commit log 文件索引
+        let index = (offset / FILE_SIZE) as usize ;
+        let reader = MMAP_READERS.get(index).unwrap();
+
+        let start = offset as usize;
+        let len = (offset + size as u64) as usize;
+        let data = &reader.reader[start..len];
         data.to_vec()
     }
 }
 
+fn file_path() -> PathBuf {
+    std::env::current_dir()
+        .expect("获取应用目录异常")
+        .join(DIR_NAME)
+}
+
+/// 获取 排序后的 commit_log files
+fn sorted_commit_log_files() -> Vec<DirEntry> {
+    let mut files = file_util::get_all_files(&file_path());
+    files.sort_by_key(|file| file.file_name());
+    files
+}
+
+
+
 #[cfg(test)]
 
 mod tests {
-    use std::str::FromStr;
     use crate::common::log_util::log_init;
     use crate::storage::commit_log::MMAP_WRITER;
     use crate::storage::message::Message;
@@ -226,10 +297,7 @@ mod tests {
 
     #[test]
     fn sys_root_test() {
-        let string = format!("{number:>0width$}", number = 1024, width = 20);
-        println!("{string}");
-
-        let i = u64::from_str(string.as_str()).unwrap();
+        let i = 302 / 200;
         println!("{i}");
     }
 }
