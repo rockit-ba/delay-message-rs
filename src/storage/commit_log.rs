@@ -27,9 +27,7 @@ const DIR_NAME: &str = "store/commit_log";
 
 lazy_static! {
     /// 内存映射writer
-    pub static ref MMAP_WRITER: MmapWriter = {
-        MmapWriter::new(None)
-    };
+    pub static ref MMAP_WRITER: MmapWriter = MmapWriter::new(None);
 }
 
 /// commit_log 写对象
@@ -175,15 +173,14 @@ fn real_start_offset(file: &File, stored_offset: usize) -> usize {
     reader.seek(SeekFrom::Start(real_offset as u64)).unwrap();
     // 注意，这里已经游标走出4个
     while let Ok(size) = reader.read_u32::<LittleEndian>() {
-        if size < Message::fix_len() {
+        if size < Message::mix_len() {
             break;
         }
 
         let mut data = vec![0u8; size as usize];
         reader.read_exact(&mut data).unwrap();
-        info!("{}", data.len());
         if let Some(msg) = Message::deserialize_binary(&mut data, size) {
-            info!("解析消息：{:?}", &msg);
+            info!("重新计算解析消息：{:?}", &msg);
             real_offset += msg.msg_len() as usize;
         };
     }
