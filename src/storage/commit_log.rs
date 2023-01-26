@@ -21,7 +21,7 @@ use log::{error, info};
 /// 存储文件初始化大小
 const FILE_SIZE: u64 = 200;
 /// 第一个存储文件的名称
-const INIT_LOG_FILE_NAME: u64 = 0;
+const INIT_LOG_FILE_NAME: &str = "00000000000000000000";
 /// 文件存储目录
 const DIR_NAME: &str = "store/commit_log";
 
@@ -50,6 +50,7 @@ impl MmapWriter {
             None => MmapWriter::file_name_create(),
             Some(file_name) => String::from(file_name),
         };
+        info!("当前 write file name：{file_name_}");
 
         let path = std::env::current_dir()
             .expect("获取应用目录异常")
@@ -82,14 +83,12 @@ impl MmapWriter {
         let path = std::env::current_dir()
             .expect("获取应用程序目录异常")
             .join(DIR_NAME);
-        file_util::get_all_files(&path)
-            .iter()
-            .map(|ele| u64::from_str(ele.file_name().to_str().unwrap()).unwrap())
-            .collect::<Vec<_>>()
+        let mut files = file_util::get_all_files(&path);
+        files.sort_by_key(|file| file.file_name());
+        files.iter()
+            .map(|file| file.file_name().to_str().unwrap().to_string())
             .last()
-            .copied()
-            .unwrap_or(INIT_LOG_FILE_NAME)
-            .to_string()
+            .unwrap_or(INIT_LOG_FILE_NAME.to_string())
     }
 
     /// 创建 MmapWriter#writer
@@ -145,9 +144,6 @@ impl MmapWriter {
         }
 
         self.new_writer_create();
-        {
-            info!("新文件名：{:?}", self.file_name.read().unwrap().to_string());
-        }
         self.write(data);
     }
 
@@ -160,7 +156,8 @@ impl MmapWriter {
             let name = self.file_name.read().unwrap().clone();
             curr = u64::from_str(name.as_str()).unwrap();
         }
-        let new_writer = Self::new(Some((curr + FILE_SIZE).to_string().as_str()));
+        let new_name = format!("{number:>0width$}", number = curr + FILE_SIZE, width = 20);
+        let new_writer = Self::new(Some(new_name.as_str()));
         {
             *self.file_name.write().unwrap() = new_writer.file_name.read().unwrap().to_string();
             let mut old = self.writer.write().unwrap();
@@ -211,20 +208,20 @@ pub fn read(offset: u64, size: u32) -> Vec<u8> {
 #[cfg(test)]
 
 mod tests {
+    use std::str::FromStr;
     use crate::common::log_util::log_init;
     use crate::storage::commit_log::MMAP_WRITER;
     use crate::storage::message::Message;
-    use log::info;
 
     #[test]
     fn test_01_write_message() {
         log_init();
-        let json = String::from("{\"msg_len\":66,\"body_crc\":342342,\"physical_offset\":0,\"send_timestamp\":1232432443,\"store_timestamp\":1232432999,\"body_len\":21,\"body\":\"此情可待成追追\",\"topic_len\":9,\"topic\":\"topic_oms\",\"prop_len\":0,\"prop\":\"\"}");
+        let json = String::from("{\"msg_len\":66,\"body_crc\":342342,\"physical_offset\":0,\"send_timestamp\":1232432443,\"store_timestamp\":1232432999,\"body_len\":21,\"body\":\"此情可待成追忆\",\"topic_len\":9,\"topic\":\"topic_oms\",\"prop_len\":0,\"prop\":\"\"}");
         let message = Message::deserialize_json(&json).serialize_binary();
         let x = message.as_slice();
         MMAP_WRITER.write(x);
 
-        let json2 = String::from("{\"msg_len\":66,\"body_crc\":342342,\"physical_offset\":0,\"send_timestamp\":1232432443,\"store_timestamp\":1232432999,\"body_len\":21,\"body\":\"只是当时已茫茫\",\"topic_len\":9,\"topic\":\"topic_oms\",\"prop_len\":0,\"prop\":\"\"}");
+        let json2 = String::from("{\"msg_len\":66,\"body_crc\":342342,\"physical_offset\":0,\"send_timestamp\":1232432443,\"store_timestamp\":1232432999,\"body_len\":21,\"body\":\"只是当时已茫然\",\"topic_len\":9,\"topic\":\"topic_oms\",\"prop_len\":0,\"prop\":\"\"}");
         let message2 = Message::deserialize_json(&json2).serialize_binary();
         let x2 = message2.as_slice();
         MMAP_WRITER.write(x2);
@@ -232,13 +229,10 @@ mod tests {
 
     #[test]
     fn sys_root_test() {
-        log_init();
-        let string = format!(
-            "{:?}",
-            std::env::current_dir()
-                .expect("获取应用程序目录异常")
-                .as_os_str()
-        );
-        info!("{string}");
+        let string = format!("{number:>0width$}", number = 1024, width = 20);
+        println!("{string}");
+
+        let i = u64::from_str(string.as_str()).unwrap();
+        println!("{i}");
     }
 }
