@@ -1,5 +1,7 @@
 //! crc 32 校验和工具
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use crc::{Crc, CRC_32_CKSUM};
 
 const CRC_CKSUM: Crc<u32> = Crc::<u32>::new(&CRC_32_CKSUM);
@@ -15,4 +17,11 @@ pub fn crc_check(save_crc: u32, data: &[u8]) {
 /// 获取数据的crc
 pub fn crc32(bytes: &[u8]) -> u32 {
     CRC_CKSUM.checksum(bytes)
+}
+
+/// 获取hash_code
+pub fn hashcode<T: Hash>(t: &T) -> u64 {
+    let mut s = DefaultHasher::new();
+    t.hash(&mut s);
+    s.finish()
 }

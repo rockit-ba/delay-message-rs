@@ -4,7 +4,7 @@ ConsumeQueue：消息消费队列，引入的目的主要是提高 消息消费�
 如果要遍历commitlog文件,根据topic检索消息是非常低效的。
 
 Consumer即可根据ConsumeQueue来查找待消费的消息。其中，ConsumeQueue（逻辑消费队列）作为消费消息的索引，保存了指定Topic下
-的队列消息在CommitLog中的 [起始物理偏移量offset 8]，[消息大小size 4]和[消息Tag的HashCode值 8].
+的队列消息在CommitLog中的 [起始物理偏移量offset 8]，[消息大小size 4]和[消息Tag的HashCode值 8]. 1G内存可以存储5000万多条消息
 
 consumequeue文件可以看成是基于topic的commitlog索引文件，故consumequeue文件夹的组织方式如下：
 topic/queue/file三层组织结构，同样consumequeue文件采取定长设计，每一个条目共20个字节，

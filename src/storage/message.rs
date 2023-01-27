@@ -1,6 +1,6 @@
 //! 消息对象
 
-use crate::common::crc_check_util::{crc32, crc_check};
+use crate::common::data_process_util::{crc32, crc_check};
 use byteorder::{LittleEndian, ReadBytesExt};
 use serde::{Deserialize, Serialize};
 use std::io::{BufReader, Read};

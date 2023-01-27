@@ -20,7 +20,11 @@ chrono = "0.4.0"
 # 错误处理
 anyhow = "1.0"
 thiserror = "1.0"
-# 异步执行
-tokio = { version = "1.24.2", features = ["time","macros","rt","rt-multi-thread","net"] }
+# 异步
+tokio = { version = "1.24.2", features = ["full"] }
+
+# 并发容器
+crossbeam = "0.8.2"
+rayon = "1.6.1"
 
 lazy_static = "1.4.0"
