@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::RwLock;
+use crossbeam::atomic::AtomicCell;
 
 use crate::cust_error::{panic, CommitLogError};
 use crate::file_util;
@@ -36,7 +37,7 @@ lazy_static! {
 pub struct MmapWriter {
     // 记录服务正在运行的 mmap 的开始写入的 offset
     start_offset: AtomicUsize,
-    file_name: RwLock<String>,
+    file_name: AtomicCell<String>,
     writer: RwLock<MmapMut>,
 }
 impl MmapWriter {
@@ -64,7 +65,7 @@ impl MmapWriter {
                 let (writer, start_offset) = MmapWriter::writer_create(&file);
                 MmapWriter {
                     start_offset,
-                    file_name: RwLock::new(file_name_),
+                    file_name: AtomicCell::new(file_name_),
                     writer,
                 }
             }
@@ -123,9 +124,7 @@ impl MmapWriter {
             let mut m_map = self.writer.write().unwrap();
             let mut buf = &mut m_map[self.start_offset.load(Ordering::SeqCst)..];
 
-            {
-                info!("当前文件[{}]剩余：{},当前数据大小：{}",self.file_name.read().unwrap().to_string(),buf.len(), data.len());
-            }
+            info!("当前文件剩余：{},当前数据大小：{}", buf.len(), data.len());
             if buf.len() > data.len() {
                 buf.write_all(data).unwrap();
                 self.start_offset.fetch_add(data.len(), Ordering::SeqCst);
@@ -142,17 +141,16 @@ impl MmapWriter {
 
     /// 当前commit_log文件已满，开始创建新的文件
     fn new_writer_create(&self) {
-        info!("当前commit_log文件已满，开始创建新的文件");
         self.start_offset.store(0, Ordering::SeqCst);
-        let curr;
-        {
-            let name = self.file_name.read().unwrap().clone();
-            curr = u64::from_str(name.as_str()).unwrap();
-        }
+        let full_file = self.file_name.take();
+        let curr = u64::from_str(full_file.as_str()).unwrap();
+        info!("当前commit_log文件[{}]已满，开始创建新的文件", full_file);
+
         let new_name = format!("{number:>0width$}", number = curr + FILE_SIZE, width = 20);
         let new_writer = Self::new(Some(new_name.as_str()));
+        self.file_name.store(new_writer.file_name.take());
+
         {
-            *self.file_name.write().unwrap() = new_writer.file_name.read().unwrap().to_string();
             let mut old = self.writer.write().unwrap();
             let mut new = new_writer.writer.write().unwrap();
             mem::swap(old.deref_mut(), new.deref_mut());
@@ -277,6 +275,7 @@ fn sorted_commit_log_files() -> Vec<DirEntry> {
 #[cfg(test)]
 
 mod tests {
+    use crossbeam::atomic::AtomicCell;
     use crate::common::log_util::log_init;
     use crate::storage::commit_log::MMAP_WRITER;
     use crate::storage::message::Message;
@@ -297,7 +296,7 @@ mod tests {
 
     #[test]
     fn sys_root_test() {
-        let i = 302 / 200;
-        println!("{i}");
+        let name = AtomicCell::new(String::from("000000"));
+        name.swap(String::new());
     }
 }
