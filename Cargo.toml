@@ -22,10 +22,15 @@ anyhow = "1.0"
 thiserror = "1.0"
 # 异步
 tokio = { version = "1.0", features = ["full"] }
-
+tokio-util = { version = "0.7.0", features = ["full"] }
+tokio-stream = "0.1.0"
+tokio-macros = "1.8.0"
+futures = "0.3.0"
 # 并发容器
 crossbeam = "0.8.0"
 # 并行操作
 rayon = "1.6.0"
+
+rand = "0.8.0"
 
 lazy_static = "1.4.0"

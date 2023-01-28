@@ -7,8 +7,11 @@ use delay_message_rs::log_util::log_init;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>>{
     log_init();
+    // 开始初始化延迟消息
+    println!("开始初始化延迟消息-->");
     consume_queue::init().await;
-    println!("----");
+
+    println!("开始监听-->");
     let listener = TcpListener::bind("127.0.0.1:9999").await?;
 
     loop {
