@@ -18,7 +18,7 @@ pub struct Message {
     /// 校验和 4
     body_crc: u32,
     /// 在log 文件中的偏移量，物理偏移量 8
-    physical_offset: u64,
+    pub physical_offset: u64,
     /// 消息在客户端发送的时间戳 8
     send_timestamp: u64,
     /// 消息在服务端存储的时间戳 8
@@ -30,11 +30,11 @@ pub struct Message {
     /// topic的长度 2
     topic_len: u16,
     /// topic
-    topic: String,
+    pub topic: String,
     /// 消息属性长度 2
     prop_len: u16,
-    /// 消息属性
-    prop: String,
+    /// 消息属性 <_delay-10>
+    pub prop: String,
 }
 
 impl Message {

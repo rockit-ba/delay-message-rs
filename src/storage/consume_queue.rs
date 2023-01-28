@@ -1,5 +1,6 @@
 //! 用于构建 commit_log 数据管理,加快消息消费
 
+use std::str::FromStr;
 use std::time::Duration;
 use lazy_static::lazy_static;
 use log::{info, warn};
@@ -8,6 +9,7 @@ use tokio::sync::watch::{Sender};
 use tokio_stream::StreamExt;
 use tokio_util::time::DelayQueue;
 use crate::data_process_util::hashcode;
+use crate::storage::message::Message;
 
 lazy_static! {
     /// 存放延迟消息的队列
@@ -46,6 +48,16 @@ pub struct QueueMessage {
     pub delay_time : u32,
 }
 impl QueueMessage {
+    /// 根据 commit_log message 构建一个 QueueMessage
+    pub fn from_message(message: &Message) -> (Self, Duration) {
+        let prop = message.prop.clone();
+        let delay_time =  prop.split('-').collect::<Vec<_>>();
+        QueueMessage::new(message.physical_offset,
+                          message.msg_len(),
+                          &message.topic,
+                          u32::from_str(delay_time.get(1).unwrap()).unwrap())
+    }
+
     pub fn new(physical_offset: u64, size: u32, tag: &str, delay_time: u32) -> (Self, Duration) {
         let message = QueueMessage {
             physical_offset,
