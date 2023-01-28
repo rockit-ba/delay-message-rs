@@ -3,13 +3,14 @@
 use std::time::Duration;
 use lazy_static::lazy_static;
 use log::{info, warn};
-use rand::Rng;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, watch};
+use tokio::sync::watch::{Sender};
 use tokio_stream::StreamExt;
 use tokio_util::time::DelayQueue;
 use crate::data_process_util::hashcode;
 
 lazy_static! {
+    /// 存放延迟消息的队列
     static ref DELAY_QUEUE: RwLock<DelayQueue<QueueMessage>> = {
         let mut queue = DelayQueue::<QueueMessage>::with_capacity(1024);
         let (block,duration) = QueueMessage::block_message();
@@ -17,10 +18,23 @@ lazy_static! {
         queue.insert(block, duration);
         RwLock::new(queue)
     };
+
+    /// 传递过期消息的 channel
+    static ref ESCAPE_CHANNEL: Sender<QueueMessage> = {
+        let (tx, mut rx) = watch::channel(QueueMessage::default());
+        // TODO 根据topic 创建对应的 接收者，然后将消息存放到对应的队列
+        tokio::spawn(async move {
+            while rx.changed().await.is_ok() {
+                info!("收到到期消息 ： {:?}", *rx.borrow());
+            }
+        });
+        tx
+    };
+
 }
 
 /// commit_log 索引数据
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,Default)]
 pub struct QueueMessage {
     // commit_log 物理偏移量
     physical_offset: u64,
@@ -73,8 +87,7 @@ pub async fn init() {
 }
 /// 从磁盘反序列化出 queue_message ，初始化到延迟队列
 async fn init_message() {
-    for _ in 0..10 {
-        let r = rand::thread_rng().gen_range(3..10);
+    for r in 1..10 {
         let (task_01, duration1) = QueueMessage::new(r as u64, r as u32, "", r as u32);
         {
             DELAY_QUEUE.write().await.insert(task_01, duration1);
@@ -96,7 +109,9 @@ async fn process_message() {
                     queue.insert(block, duration);
                     return;
                 }
-                info!("{msg:?}");
+                info!("消息过期：{msg:?}");
+
+                ESCAPE_CHANNEL.send(ele.into_inner()).unwrap();
             }
         }
     });
@@ -111,7 +126,6 @@ mod tests {
 
     #[tokio::test]
     async fn delay_queue() {
-        println!("{}", u32::MAX);
 
     }
 }
