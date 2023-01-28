@@ -89,14 +89,14 @@ async fn process_message() {
             let mut queue = DELAY_QUEUE.write().await;
             if let Some(ele) = queue.next().await {
                 // 在这里处理取出的元素
-                let e = ele.get_ref();
-                if e.is_block_message() {
+                let msg = ele.get_ref();
+                if msg.is_block_message() {
                     let (block,duration) = QueueMessage::block_message();
-                    warn!("无效阻塞消息消费：{e:?}，将重新赋值：{block:?}");
+                    warn!("无效阻塞消息消费：{msg:?}，将重新赋值：{block:?}");
                     queue.insert(block, duration);
                     return;
                 }
-                info!("{e:?}");
+                info!("{msg:?}");
             }
         }
     });
