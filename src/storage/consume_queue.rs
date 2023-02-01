@@ -38,16 +38,20 @@ lazy_static! {
 /// commit_log 索引数据
 #[derive(Debug,Clone,Default)]
 pub struct QueueMessage {
-    // commit_log 物理偏移量
+    // commit_log 物理偏移量 8
     physical_offset: u64,
-    // 数据大小
+    // 数据大小 4
     size: u32,
-    // tag  的hash_code
+    // tag  的hash_code 8
     tag_hashcode: u64,
-    // 最长支持一年  31_536_000  秒
+    // 最长支持一年  31_536_000  秒 4
     pub delay_time : u32,
 }
 impl QueueMessage {
+    /// 定长长度 1G 内存可以存储 4473_9242条数据
+    pub fn len() -> u16 {
+        24_u16
+    }
     /// 根据 commit_log message 构建一个 QueueMessage
     pub fn from_message(message: &Message) -> (Self, Duration) {
         let prop = message.prop.clone();
@@ -58,6 +62,7 @@ impl QueueMessage {
                           u32::from_str(delay_time.get(1).unwrap()).unwrap())
     }
 
+    ///  创建消息
     pub fn new(physical_offset: u64, size: u32, tag: &str, delay_time: u32) -> (Self, Duration) {
         let message = QueueMessage {
             physical_offset,
