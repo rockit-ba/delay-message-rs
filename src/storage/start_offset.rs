@@ -64,7 +64,7 @@ pub fn read() -> usize {
 
 mod tests {
     use crate::common::log_util::log_init;
-    use crate::storage::start_offset::{read, write};
+    use crate::storage::start_offset::{read};
     use log::info;
 
 
