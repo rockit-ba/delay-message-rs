@@ -11,6 +11,19 @@ use tokio_util::time::DelayQueue;
 use crate::data_process_util::hashcode;
 use crate::storage::message::Message;
 
+/// 最大延迟时间
+const MAX_DELAY_TIME: u32 = 31_536_000;
+/// 存储文件初始化大小
+const FILE_SIZE: u64 = 200;
+/// 第一个存储文件的名称
+const INIT_LOG_FILE_NAME: &str = "00000000000000000000";
+/// 文件存储目录，最终的目录还需要拼接对应topic的名称
+///
+/// |consume_queue
+///     |topic_test
+///         |filename  该索引文件暂不进行切分
+const BASE_DIR_NAME: &str = "store/consume_queue";
+
 lazy_static! {
     /// 存放延迟消息的队列
     static ref DELAY_QUEUE: RwLock<DelayQueue<QueueMessage>> = {
@@ -24,10 +37,17 @@ lazy_static! {
     /// 传递过期消息的 channel
     static ref ESCAPE_CHANNEL: Sender<QueueMessage> = {
         let (tx, mut rx) = watch::channel(QueueMessage::default());
-        // TODO 根据topic 创建对应的 接收者，然后将消息存放到对应的队列
+        // TODO 根据tag_hashcode 创建对应的 接收者，然后将消息存放到对应的队列
+        let mut r2 = rx.clone();
         tokio::spawn(async move {
             while rx.changed().await.is_ok() {
-                info!("收到到期消息 ： {:?}", *rx.borrow());
+                info!("topic 1 收到到期消息 ： {:?}", *rx.borrow());
+            }
+        });
+
+        tokio::spawn(async move {
+            while r2.changed().await.is_ok() {
+                info!("topic 2 收到到期消息 ： {:?}", *r2.borrow());
             }
         });
         tx
@@ -80,7 +100,7 @@ impl QueueMessage {
             physical_offset: 0,
             size: 0,
             tag_hashcode: 0,
-            delay_time: 31_536_000,
+            delay_time: MAX_DELAY_TIME,
         };
         let time = message.duration();
         (message, time)
