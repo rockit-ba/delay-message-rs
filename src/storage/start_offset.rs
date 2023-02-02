@@ -3,9 +3,9 @@
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 use log::{error};
-use std::fs::{File, OpenOptions};
-use std::io::{BufReader, Write};
-use std::ops::{Deref, DerefMut};
+use std::fs::{OpenOptions};
+pub use std::io::{Write};
+use std::ops::{DerefMut};
 use std::path::PathBuf;
 use memmap2::{MmapMut, MmapOptions};
 use crate::cust_error::{CommitLogError, panic};
