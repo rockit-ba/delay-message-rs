@@ -56,8 +56,10 @@ impl MmapWriter {
         {
             Ok(file) => {
                 let writer = MmapWriter::writer_create(&file);
+                let offset = start_offset::read();
+                info!("从 start_offset 文件读取 START_OFFSET：{}", offset);
                 MmapWriter {
-                    prev_write_size: 0,
+                    prev_write_size: offset,
                     file_name: file_name_,
                     writer,
                 }
@@ -85,9 +87,6 @@ impl MmapWriter {
             panic(err.to_string().as_str())
         }
 
-        let offset = start_offset::read();
-        info!("从 start_offset 文件读取 START_OFFSET：{}", offset);
-
         unsafe {
             match MmapOptions::new().map_mut(file) {
                 Ok(result) => result,
@@ -109,6 +108,8 @@ impl MmapWriter {
         if m_mut.len() > data.len() {
             m_mut.write_all(data).unwrap();
             self.prev_write_size += data.len();
+            info!("写入offset {}",self.prev_write_size as u64);
+            start_offset::write(self.prev_write_size as u64);
             return;
         }
 
@@ -120,11 +121,16 @@ impl MmapWriter {
     fn new_writer_create(&mut self) {
         let curr = u64::from_str(self.file_name.as_str()).unwrap();
         info!("当前commit_log文件[{}]已满，开始创建新的文件", self.file_name);
+        // TODO 新文件还原为0，这里要可能需要兼容
+        start_offset::write(0);
 
         let new_name = format!("{number:>0width$}", number = curr + FILE_SIZE, width = 20);
         let new_writer = Self::new(Some(new_name.as_str()));
-        self.file_name = new_name.to_string();
+        // 还原当前文件参数
+        self.prev_write_size = 0;
+        self.file_name = new_name;
         self.writer = new_writer.writer;
+
     }
 
 }
@@ -232,8 +238,7 @@ mod tests {
     #[test]
     fn test_01_write_message() {
         log_init();
-        let string = MmapWriter::file_name_create();
-        let mut writer = MmapWriter::new(Some(&string));
+        let mut writer = MmapWriter::new(None);
         let json = String::from("{\"msg_len\":66,\"body_crc\":342342,\"physical_offset\":0,\"send_timestamp\":1232432443,\"store_timestamp\":1232432999,\"body_len\":21,\"body\":\"此情可待成追忆\",\"topic_len\":9,\"topic\":\"topic_oms\",\"prop_len\":0,\"prop\":\"\"}");
         let message = Message::deserialize_json(&json).serialize_binary();
         let x = message.as_slice();

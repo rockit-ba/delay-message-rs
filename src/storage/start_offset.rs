@@ -1,63 +1,63 @@
 //! 持久化 start_offset
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use lazy_static::lazy_static;
-use log::{error, info};
+
+use log::{error};
 use std::fs::{File, OpenOptions};
+use std::io::{BufReader, Write};
+use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
-use std::sync::Mutex;
-use tokio::time::interval;
+use memmap2::{MmapMut, MmapOptions};
+use crate::cust_error::{CommitLogError, panic};
+
 
 /// 持久化间隔，单位秒
 const INTERVAL: u64 = 5;
 /// 存储文件名
 const START_OFFSET_FILE: &str = "start_offset";
 
-lazy_static! {
-    /// start_offset 文件引用
-    static ref FILE: Mutex<File> = {
-        let path: PathBuf = PathBuf::from(START_OFFSET_FILE);
-        let file = OpenOptions::new()
-        .create(true).append(true).read(true)
-        .open(path).expect("打开 start_offset 存储文件失败");
-        Mutex::new(file)
-    };
-}
+static mut FILE: Option<MmapMut> = None;
 
-/// 定时持久化 start_offset
-async fn write_schedule() {
-    // 每隔1秒执行一次
-    let mut interval = interval(std::time::Duration::from_secs(INTERVAL));
-    loop {
-        interval.tick().await;
-        write().await;
-        info!("持久化 start_offset 成功");
+fn get_file() -> &'static mut MmapMut {
+    unsafe {
+        if FILE.is_none() {
+            let path: PathBuf = PathBuf::from(START_OFFSET_FILE);
+            let file = OpenOptions::new()
+                    .create(true).write(true).read(true)
+                    .open(path).expect("打开 start_offset 存储文件失败");
+            file.set_len(8).unwrap();
+            FILE = Some(match MmapOptions::new().map_mut(&file) {
+                Ok(result) => result,
+                Err(err) => panic(
+                    CommitLogError::MmapErr(err.to_string())
+                        .to_string()
+                        .as_str(),
+                ),
+            });
+        }
+        FILE.as_mut().unwrap()
     }
 }
+
 
 /// 持久化 start_offset
-async fn write() {
+pub fn write(offset: u64) {
     // todo 由writer主动通知写checkpoint文件
-    let offset = 1 as u64;
-    {
-        let mut file = FILE.lock().unwrap();
-        file.write_u64::<LittleEndian>(offset)
-            .unwrap_or_else(|err| {
-                error!("持久化 start_offset 文件错误 {:?}", err);
-            });
-    }
+    get_file().deref_mut().write_u64::<LittleEndian>(offset)
+        .unwrap_or_else(|err| {
+            error!("持久化 start_offset 文件错误 {:?}", err);
+        });
+    get_file().flush().unwrap();
 }
 
 /// 获取文件存储的 start_offset
 pub fn read() -> usize {
-    {
-        let mut file = FILE.lock().unwrap();
-        let offset = file.read_u64::<LittleEndian>().unwrap_or_else(|err| {
-            error!("读取 start_offset 文件错误 {:?},返回默认 0", err);
-            0_u64
-        });
-        offset as usize
-    }
+    let mut reader = std::io::Cursor::new(get_file().deref_mut());
+    let offset = reader.read_u64::<LittleEndian>().unwrap_or_else(|err| {
+        error!("读取 start_offset 文件错误 {:?},返回默认 0", err);
+        0_u64
+    });
+    offset as usize
 }
 
 #[cfg(test)]
@@ -67,11 +67,6 @@ mod tests {
     use crate::storage::start_offset::{read, write};
     use log::info;
 
-    #[tokio::test]
-    async fn test_start_offset_write() {
-        log_init();
-        write().await;
-    }
 
     #[test]
     fn test_start_offset_read() {
