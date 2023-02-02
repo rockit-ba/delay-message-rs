@@ -1,6 +1,5 @@
 //! 持久化 start_offset
 
-use crate::storage::commit_log::MMAP_WRITER;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use lazy_static::lazy_static;
 use log::{error, info};
@@ -38,7 +37,8 @@ async fn write_schedule() {
 
 /// 持久化 start_offset
 async fn write() {
-    let offset = MMAP_WRITER.start_offset() as u64;
+    // todo 由writer主动通知写checkpoint文件
+    let offset = 1 as u64;
     {
         let mut file = FILE.lock().unwrap();
         file.write_u64::<LittleEndian>(offset)

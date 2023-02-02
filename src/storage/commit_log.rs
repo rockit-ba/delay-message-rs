@@ -1,24 +1,18 @@
 //! commit_log 文件模块
 
-use byteorder::{LittleEndian, ReadBytesExt};
+
 use memmap2::{Mmap, MmapMut, MmapOptions};
 use std::fs::{DirEntry, File, OpenOptions};
-use std::io::{BufReader, Read, Seek, SeekFrom, Write};
-use std::mem;
-use std::ops::{DerefMut};
+use std::io::{Write};
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::RwLock;
-use crossbeam::atomic::AtomicCell;
 
 use crate::cust_error::{panic, CommitLogError};
 use crate::file_util;
-use crate::storage::message::Message;
 use crate::storage::start_offset;
 
 use lazy_static::lazy_static;
-use log::{error, info};
+use log::{info};
 
 /// 存储文件初始化大小
 const FILE_SIZE: u64 = 200;
@@ -29,16 +23,15 @@ const DIR_NAME: &str = "store/commit_log";
 
 lazy_static! {
     /// writer
-    pub static ref MMAP_WRITER: MmapWriter = MmapWriter::new(None);
+    //pub static ref MMAP_WRITER: MmapWriter = MmapWriter::new(None);
     static ref MMAP_READERS: Vec<MmapReader> = MmapReader::init_readers();
 }
 
 /// commit_log 写对象
 pub struct MmapWriter {
-    // 记录服务正在运行的 mmap 的开始写入的 offset
-    start_offset: AtomicUsize,
-    file_name: AtomicCell<String>,
-    writer: RwLock<MmapMut>,
+    prev_write_size: usize,
+    file_name: String,
+    writer: MmapMut,
 }
 impl MmapWriter {
     /// 创建实例
@@ -62,10 +55,10 @@ impl MmapWriter {
             .open(path)
         {
             Ok(file) => {
-                let (writer, start_offset) = MmapWriter::writer_create(&file);
+                let writer = MmapWriter::writer_create(&file);
                 MmapWriter {
-                    start_offset,
-                    file_name: AtomicCell::new(file_name_),
+                    prev_write_size: 0,
+                    file_name: file_name_,
                     writer,
                 }
             }
@@ -86,7 +79,7 @@ impl MmapWriter {
     }
 
     /// 创建 MmapWriter#writer
-    fn writer_create(file: &File) -> (RwLock<MmapMut>, AtomicUsize) {
+    fn writer_create(file: &File) -> MmapMut {
         if let Err(err) = file.set_len(FILE_SIZE) {
             let err = CommitLogError::SetLenErr(err.to_string());
             panic(err.to_string().as_str())
@@ -95,44 +88,28 @@ impl MmapWriter {
         let offset = start_offset::read();
         info!("从 start_offset 文件读取 START_OFFSET：{}", offset);
 
-        // 为了防止异常情况下最后的offset值没有写入 start_offset  文件，增量继续获取真实的offset
-        let offset = Self::real_start_offset(file, offset);
-        info!("从 log 文件重新计算 START_OFFSET：{}", offset);
-
-        (
-            RwLock::new(unsafe {
-                match MmapOptions::new().map_mut(file) {
-                    Ok(result) => result,
-                    Err(err) => panic(
-                        CommitLogError::MmapErr(err.to_string())
-                            .to_string()
-                            .as_str(),
-                    ),
-                }
-            }),
-            AtomicUsize::new(offset),
-        )
-    }
-
-    /// 获取 writer 的 start_offset
-    pub fn start_offset(&self) -> usize {
-        self.start_offset.load(Ordering::SeqCst)
-    }
-    /// 写数据
-    pub fn write(&self, data: &[u8]) {
-        {
-            let mut m_map = self.writer.write().unwrap();
-            let mut buf = &mut m_map[self.start_offset.load(Ordering::SeqCst)..];
-
-            info!("当前文件剩余：{},当前数据大小：{}", buf.len(), data.len());
-            if buf.len() > data.len() {
-                buf.write_all(data).unwrap();
-                self.start_offset.fetch_add(data.len(), Ordering::SeqCst);
-                if let Err(err) = m_map.flush_async() {
-                    error!("log文件 flush_async 异常：{:?}", err);
-                }
-                return;
+        unsafe {
+            match MmapOptions::new().map_mut(file) {
+                Ok(result) => result,
+                Err(err) => panic(
+                    CommitLogError::MmapErr(err.to_string())
+                        .to_string()
+                        .as_str(),
+                ),
             }
+        }
+    }
+
+    /// 写数据
+    pub fn write(&mut self, data: &[u8]) {
+        let prev_size = self.prev_write_size;
+        let mut m_mut = &mut self.writer[prev_size..];
+
+        info!("当前文件剩余：{},当前数据大小：{}", m_mut.len(), data.len());
+        if m_mut.len() > data.len() {
+            m_mut.write_all(data).unwrap();
+            self.prev_write_size += data.len();
+            return;
         }
 
         self.new_writer_create();
@@ -140,44 +117,16 @@ impl MmapWriter {
     }
 
     /// 当前commit_log文件已满，开始创建新的文件
-    fn new_writer_create(&self) {
-        self.start_offset.store(0, Ordering::SeqCst);
-        let full_file = self.file_name.take();
-        let curr = u64::from_str(full_file.as_str()).unwrap();
-        info!("当前commit_log文件[{}]已满，开始创建新的文件", full_file);
+    fn new_writer_create(&mut self) {
+        let curr = u64::from_str(self.file_name.as_str()).unwrap();
+        info!("当前commit_log文件[{}]已满，开始创建新的文件", self.file_name);
 
         let new_name = format!("{number:>0width$}", number = curr + FILE_SIZE, width = 20);
         let new_writer = Self::new(Some(new_name.as_str()));
-        self.file_name.store(new_writer.file_name.take());
-
-        {
-            let mut old = self.writer.write().unwrap();
-            let mut new = new_writer.writer.write().unwrap();
-            mem::swap(old.deref_mut(), new.deref_mut());
-        }
+        self.file_name = new_name.to_string();
+        self.writer = new_writer.writer;
     }
 
-    /// 初始化log 文件真实的开始写的位置
-    /// stored_offset：从start_offset文件获取的最后写入的值
-    fn real_start_offset(file: &File, stored_offset: usize) -> usize {
-        let mut real_offset = stored_offset;
-        let mut reader = BufReader::new(file);
-        reader.seek(SeekFrom::Start(real_offset as u64)).unwrap();
-        // 注意，这里已经游标走出4个
-        while let Ok(size) = reader.read_u32::<LittleEndian>() {
-            if size < Message::mix_len() {
-                break;
-            }
-
-            let mut data = vec![0u8; size as usize];
-            reader.read_exact(&mut data).unwrap();
-            if let Some(msg) = Message::deserialize_binary(&mut data, size) {
-                info!("重新计算解析消息：{:?}", &msg);
-                real_offset += msg.msg_len() as usize;
-            };
-        }
-        real_offset
-    }
 }
 
 
@@ -277,21 +226,23 @@ fn sorted_commit_log_files() -> Vec<DirEntry> {
 mod tests {
     use crossbeam::atomic::AtomicCell;
     use crate::common::log_util::log_init;
-    use crate::storage::commit_log::MMAP_WRITER;
+    use crate::storage::commit_log::MmapWriter;
     use crate::storage::message::Message;
 
     #[test]
     fn test_01_write_message() {
         log_init();
+        let string = MmapWriter::file_name_create();
+        let mut writer = MmapWriter::new(Some(&string));
         let json = String::from("{\"msg_len\":66,\"body_crc\":342342,\"physical_offset\":0,\"send_timestamp\":1232432443,\"store_timestamp\":1232432999,\"body_len\":21,\"body\":\"此情可待成追忆\",\"topic_len\":9,\"topic\":\"topic_oms\",\"prop_len\":0,\"prop\":\"\"}");
         let message = Message::deserialize_json(&json).serialize_binary();
         let x = message.as_slice();
-        MMAP_WRITER.write(x);
+        writer.write(x);
 
         let json2 = String::from("{\"msg_len\":66,\"body_crc\":342342,\"physical_offset\":0,\"send_timestamp\":1232432443,\"store_timestamp\":1232432999,\"body_len\":21,\"body\":\"只是当时已茫然\",\"topic_len\":9,\"topic\":\"topic_oms\",\"prop_len\":0,\"prop\":\"\"}");
         let message2 = Message::deserialize_json(&json2).serialize_binary();
         let x2 = message2.as_slice();
-        MMAP_WRITER.write(x2);
+        writer.write(x2);
     }
 
     #[test]
