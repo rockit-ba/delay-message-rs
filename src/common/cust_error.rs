@@ -10,13 +10,7 @@ pub fn panic(err: &str) -> ! {
 }
 
 #[derive(Error, Debug)]
-pub enum IOError {
-    #[error("{COMMIT_LOG} 文件初始大小设置异常")]
-    SetLenErr,
-}
-
-#[derive(Error, Debug)]
-pub enum CommitLogError {
+pub enum MmapError {
     // #[error("Invalid header (expected {expected:?}, got {found:?})")]
     // InvalidHeader {
     //     expected: String,
@@ -24,12 +18,12 @@ pub enum CommitLogError {
     // },
     // #[error("Missing attribute: {0}")]
     // MissingAttribute(String),
-    #[error("{COMMIT_LOG} 文件open失败: {0}")]
+    #[error("文件open失败: {0}")]
     OpenErr(String),
 
-    #[error("{COMMIT_LOG} 文件初始大小设置异常: {0}")]
+    #[error("文件初始大小设置异常: {0}")]
     SetLenErr(String),
 
-    #[error("{COMMIT_LOG} 虚拟内存映射初始化异常: {0}")]
+    #[error("虚拟内存映射初始化异常: {0}")]
     MmapErr(String),
 }

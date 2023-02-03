@@ -2,17 +2,18 @@
 
 
 use memmap2::{Mmap, MmapMut, MmapOptions};
-use std::fs::{DirEntry, File, OpenOptions};
+use std::fs::{DirEntry, OpenOptions};
 use std::io::{Write};
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use crate::cust_error::{panic, CommitLogError};
+use crate::cust_error::{panic, MmapError};
 use crate::file_util;
 use crate::storage::start_offset;
 
 use lazy_static::lazy_static;
 use log::{info};
+use crate::storage::mmap::mmap_mut_create;
 
 /// 存储文件初始化大小
 const FILE_SIZE: u64 = 200;
@@ -22,13 +23,12 @@ const INIT_LOG_FILE_NAME: &str = "00000000000000000000";
 const DIR_NAME: &str = "store/commit_log";
 
 lazy_static! {
-    /// writer
-    //pub static ref MMAP_WRITER: MmapWriter = MmapWriter::new(None);
     static ref MMAP_READERS: Vec<MmapReader> = MmapReader::init_readers();
 }
 
 /// commit_log 写对象
 pub struct MmapWriter {
+    /// 保存上次写的位置，以便追加写入，初始从 start_offset 文件中读取
     prev_write_size: usize,
     file_name: String,
     writer: MmapMut,
@@ -47,25 +47,19 @@ impl MmapWriter {
         info!("当前 write file name：{file_name_}");
 
         let path = file_path().join(file_name_.as_str());
-
-        match OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .open(path)
+        match OpenOptions::new().create(true).read(true).write(true).open(path)
         {
             Ok(file) => {
-                let writer = MmapWriter::writer_create(&file);
                 let offset = start_offset::read();
                 info!("从 start_offset 文件读取 START_OFFSET：{}", offset);
                 MmapWriter {
                     prev_write_size: offset,
                     file_name: file_name_,
-                    writer,
+                    writer: mmap_mut_create(&file,FILE_SIZE),
                 }
             }
             Err(err) => {
-                let err = CommitLogError::OpenErr(err.to_string());
+                let err = MmapError::OpenErr(err.to_string());
                 panic(err.to_string().as_str())
             }
         }
@@ -73,42 +67,20 @@ impl MmapWriter {
 
     /// 初始化写文件的名称
     fn file_name_create() -> String {
-        let files = sorted_commit_log_files();
-        files.iter()
+        sorted_commit_log_files().iter()
             .map(|file| file.file_name().to_str().unwrap().to_string())
             .last()
             .unwrap_or(INIT_LOG_FILE_NAME.to_string())
     }
 
-    /// 创建 MmapWriter#writer
-    fn writer_create(file: &File) -> MmapMut {
-        if let Err(err) = file.set_len(FILE_SIZE) {
-            let err = CommitLogError::SetLenErr(err.to_string());
-            panic(err.to_string().as_str())
-        }
-
-        unsafe {
-            match MmapOptions::new().map_mut(file) {
-                Ok(result) => result,
-                Err(err) => panic(
-                    CommitLogError::MmapErr(err.to_string())
-                        .to_string()
-                        .as_str(),
-                ),
-            }
-        }
-    }
-
     /// 写数据
     pub fn write(&mut self, data: &[u8]) {
-        let prev_size = self.prev_write_size;
-        let mut m_mut = &mut self.writer[prev_size..];
+        let mut m_mut = &mut self.writer[self.prev_write_size..];
 
-        info!("当前文件剩余：{},当前数据大小：{}", m_mut.len(), data.len());
+        info!("当前文件[{}]剩余：{},当前数据大小：{}", self.file_name, m_mut.len(), data.len());
         if m_mut.len() > data.len() {
             m_mut.write_all(data).unwrap();
             self.prev_write_size += data.len();
-            info!("写入offset {}",self.prev_write_size as u64);
             start_offset::write(self.prev_write_size as u64);
             return;
         }
@@ -171,7 +143,7 @@ impl MmapReader {
                     vec.push(ele);
                 }
                 Err(err) => {
-                    let err = CommitLogError::OpenErr(err.to_string());
+                    let err = MmapError::OpenErr(err.to_string());
                     panic(err.to_string().as_str())
                 }
             }
@@ -189,7 +161,7 @@ impl MmapReader {
                 ));
             }
             Err(err) => {
-                let err = CommitLogError::OpenErr(err.to_string());
+                let err = MmapError::OpenErr(err.to_string());
                 panic(err.to_string().as_str())
             }
         }
