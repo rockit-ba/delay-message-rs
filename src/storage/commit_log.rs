@@ -2,7 +2,7 @@
 
 
 use memmap2::{Mmap, MmapMut, MmapOptions};
-use std::fs::{DirEntry, OpenOptions};
+use std::fs::{create_dir_all, DirEntry, OpenOptions};
 use std::io::{Write};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -12,11 +12,10 @@ use crate::file_util;
 use crate::storage::start_offset;
 
 use lazy_static::lazy_static;
-use log::{info};
+use log::{error, info};
+use crate::common::config::CONFIG;
 use crate::storage::mmap::mmap_mut_create;
 
-/// 存储文件初始化大小
-const FILE_SIZE: u64 = 200;
 /// 第一个存储文件的名称
 const INIT_LOG_FILE_NAME: &str = "00000000000000000000";
 /// 文件存储目录
@@ -55,7 +54,7 @@ impl MmapWriter {
                 MmapWriter {
                     prev_write_size: offset,
                     file_name: file_name_,
-                    writer: mmap_mut_create(&file,FILE_SIZE),
+                    writer: mmap_mut_create(&file,CONFIG.commit_log_file_size),
                 }
             }
             Err(err) => {
@@ -96,7 +95,7 @@ impl MmapWriter {
         // TODO 新文件还原为0，这里要可能需要兼容
         start_offset::write(0);
 
-        let new_name = format!("{number:>0width$}", number = curr + FILE_SIZE, width = 20);
+        let new_name = format!("{number:>0width$}", number = curr + CONFIG.commit_log_file_size, width = 20);
         let new_writer = Self::new(Some(new_name.as_str()));
         // 还原当前文件参数
         self.prev_write_size = 0;
@@ -174,7 +173,7 @@ impl MmapReader {
     /// size    读取的长度
     pub fn read(offset: u64, size: u32) -> Vec<u8> {
         // commit log 文件索引
-        let index = (offset / FILE_SIZE) as usize ;
+        let index = (offset / CONFIG.commit_log_file_size) as usize ;
         let reader = MMAP_READERS.get(index).unwrap();
 
         let start = offset as usize;
@@ -185,9 +184,16 @@ impl MmapReader {
 }
 
 fn file_path() -> PathBuf {
-    std::env::current_dir()
+    let path = std::env::current_dir()
         .expect("获取应用目录异常")
-        .join(DIR_NAME)
+        .join(DIR_NAME);
+    if !path.exists() {
+        if let Err(e) = create_dir_all(&path) {
+            error!("创建文件路径失败：{:?}",e);
+            panic(e.to_string().as_str())
+        }
+    }
+    path
 }
 
 /// 获取 排序后的 commit_log files

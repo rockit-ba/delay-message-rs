@@ -8,13 +8,11 @@ use tokio::sync::{RwLock, watch};
 use tokio::sync::watch::{Sender};
 use tokio_stream::StreamExt;
 use tokio_util::time::DelayQueue;
+use crate::common::config::CONFIG;
 use crate::data_process_util::hashcode;
 use crate::storage::message::Message;
 
-/// 最大延迟时间
-const MAX_DELAY_TIME: u32 = 31_536_000;
-/// 存储文件初始化大小
-const FILE_SIZE: u64 = 200;
+
 /// 第一个存储文件的名称
 const INIT_LOG_FILE_NAME: &str = "00000000000000000000";
 /// 文件存储目录，最终的目录还需要拼接对应topic的名称
@@ -100,7 +98,7 @@ impl QueueMessage {
             physical_offset: 0,
             size: 0,
             tag_hashcode: 0,
-            delay_time: MAX_DELAY_TIME,
+            delay_time: CONFIG.max_delay_time,
         };
         let time = message.duration();
         (message, time)
