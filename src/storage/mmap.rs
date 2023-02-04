@@ -9,6 +9,7 @@ use std::io::{Cursor, Seek, SeekFrom};
 use std::ops::DerefMut;
 use byteorder::{LittleEndian, ReadBytesExt};
 
+#[derive(Debug)]
 pub struct MmapWriter {
     /// 保存上次写的位置，以便追加写入，初始从 start_offset 文件中读取
     pub prev_write_size: usize,

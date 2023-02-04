@@ -62,7 +62,6 @@ lazy_static! {
 }
 
 type ConsumeQueueWriter = MmapWriter;
-
 impl ConsumeQueueWriter {
     /// 创建当前的实例
     /// dir_name 是base_dir_name/topic
@@ -118,12 +117,15 @@ impl ConsumeQueueWriter {
     }
 }
 
-#[allow(unused_variables)]
 fn writers_init() -> HashMap<String, ConsumeQueueWriter> {
-    let map = HashMap::<String, ConsumeQueueWriter>::with_capacity(1024);
+    let mut map = HashMap::<String, ConsumeQueueWriter>::with_capacity(1024);
     let path = file_path(BASE_DIR_NAME);
     get_all_dirs(&path).iter().for_each(|ele| {
         let key = ele.file_name().to_str().unwrap().to_string();
+        let dir_name = format!("{BASE_DIR_NAME}/{key}");
+        let writer = ConsumeQueueWriter::consume_queue_new(None, &dir_name);
+        info!("构建 consume_queue_writer：{:?}", writer);
+        map.insert(key, writer);
     });
     map
 }
@@ -258,7 +260,15 @@ async fn process_message() {
 
 #[cfg(test)]
 mod tests {
+    use crate::consume_queue::writers_init;
+    use crate::log_util::log_init;
 
     #[tokio::test]
     async fn delay_queue() {}
+
+    #[test]
+    fn test_init_writers() {
+        log_init();
+        writers_init();
+    }
 }
