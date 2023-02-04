@@ -49,7 +49,7 @@ type CommitLogWriter = MmapWriter;
 
 impl CommitLogWriter {
     /// 单例获取 START_OFFSET
-    pub fn instance() -> &'static mut CommitLogWriter {
+    fn instance() -> &'static mut CommitLogWriter {
         unsafe {
             if MMAP_WRITER.is_none() {
                 MMAP_WRITER = Some(Self::self_new(None));
@@ -69,7 +69,7 @@ impl CommitLogWriter {
     }
 
     /// 写数据
-    pub fn write(&mut self, data: &[u8]) {
+    fn write(&mut self, data: &[u8]) {
         let mut buf = &mut self.writer[self.prev_write_size..];
 
         info!(
