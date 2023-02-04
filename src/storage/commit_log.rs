@@ -35,7 +35,7 @@ pub fn mpsc_channel() -> UnboundedSender<Message> {
         while let Some(ele) = rx.recv().await {
             info!("收到 写入消息 {ele:?}");
             // 返回请求成功
-            CommitLogWriter::instance().write(ele.serialize_binary().as_slice());
+            CommitLogWriter::instance().commit_log_write(ele.serialize_binary().as_slice());
             // todo 发送到consume_queue进行索引存储
         }
     });
@@ -52,13 +52,13 @@ impl CommitLogWriter {
     fn instance() -> &'static mut CommitLogWriter {
         unsafe {
             if MMAP_WRITER.is_none() {
-                MMAP_WRITER = Some(Self::self_new(None));
+                MMAP_WRITER = Some(Self::commit_log_new(None));
             }
             MMAP_WRITER.as_mut().unwrap()
         }
     }
     /// 创建当前的实例
-    fn self_new(file_name: Option<&str>) -> Self {
+    fn commit_log_new(file_name: Option<&str>) -> Self {
         Self::new(
             file_name,
             INIT_LOG_FILE_NAME,
@@ -69,18 +69,18 @@ impl CommitLogWriter {
     }
 
     /// 写数据
-    fn write(&mut self, data: &[u8]) {
+    fn commit_log_write(&mut self, data: &[u8]) {
         let mut buf = &mut self.writer[self.prev_write_size..];
 
         info!(
-            "当前文件[{}]剩余：{},当前数据大小：{}",
+            "当前 commit_log 文件[{}]剩余：{},当前数据大小：{}",
             self.file_name,
             buf.len(),
             data.len()
         );
         if buf.len() < data.len() {
-            self.self_new_writer_create();
-            self.write(data);
+            self.commit_log_new_writer_create();
+            self.commit_log_write(data);
             return;
         }
         buf.write_all(data).unwrap();
@@ -89,7 +89,7 @@ impl CommitLogWriter {
     }
 
     /// 当前commit_log文件已满，开始创建新的文件
-    fn self_new_writer_create(&mut self) {
+    fn commit_log_new_writer_create(&mut self) {
         let curr = u64::from_str(self.file_name.as_str()).unwrap();
         info!(
             "当前commit_log文件[{}]已满，开始创建新的文件",
@@ -102,7 +102,7 @@ impl CommitLogWriter {
             number = curr + CONFIG.commit_log_file_size,
             width = 20
         );
-        let new_writer = Self::self_new(Some(new_name.as_str()));
+        let new_writer = Self::commit_log_new(Some(new_name.as_str()));
         self.new_writer_create(&new_name, new_writer);
     }
 }
@@ -199,12 +199,12 @@ mod tests {
         let json = String::from("{\"msg_len\":66,\"body_crc\":342342,\"physical_offset\":0,\"send_timestamp\":1232432443,\"store_timestamp\":1232432999,\"body_len\":21,\"body\":\"此情可待成追忆\",\"topic_len\":9,\"topic\":\"topic_oms\",\"prop_len\":0,\"prop\":\"\"}");
         let message = Message::deserialize_json(&json).serialize_binary();
         let x = message.as_slice();
-        writer.write(x);
+        writer.commit_log_write(x);
 
         let json2 = String::from("{\"msg_len\":66,\"body_crc\":342342,\"physical_offset\":0,\"send_timestamp\":1232432443,\"store_timestamp\":1232432999,\"body_len\":21,\"body\":\"只是当时已茫然\",\"topic_len\":9,\"topic\":\"topic_oms\",\"prop_len\":0,\"prop\":\"\"}");
         let message2 = Message::deserialize_json(&json2).serialize_binary();
         let x2 = message2.as_slice();
-        writer.write(x2);
+        writer.commit_log_write(x2);
     }
 
     #[test]

@@ -8,6 +8,7 @@ use crate::storage::mmap::MmapWriter;
 use lazy_static::lazy_static;
 use log::{info, warn};
 use std::collections::HashMap;
+use std::io::Write;
 use std::str::FromStr;
 use std::time::Duration;
 use tokio::sync::watch::{Receiver, Sender};
@@ -61,7 +62,59 @@ lazy_static! {
 
 type ConsumeQueueWriter = MmapWriter;
 
-impl ConsumeQueueWriter {}
+impl ConsumeQueueWriter {
+    /// 创建当前的实例
+    /// dir_name 是base_dir_name/topic
+    fn consume_queue_new(file_name: Option<&str>, dir_name: &str, start_offset: usize) -> Self {
+        Self::new(
+            file_name,
+            INIT_LOG_FILE_NAME,
+            dir_name,
+            start_offset,
+            CONFIG.consume_queue_file_size,
+        )
+    }
+
+    /// 写数据
+    fn consume_queue_write(&mut self, data: &[u8]) {
+        let mut buf = &mut self.writer[self.prev_write_size..];
+
+        info!(
+            "当前 consume_queue 文件[{}]剩余：{},当前数据大小：{}",
+            self.file_name,
+            buf.len(),
+            data.len()
+        );
+        if buf.len() < data.len() {
+            self.consume_queue_new_writer_create();
+            self.consume_queue_write(data);
+            return;
+        }
+        buf.write_all(data).unwrap();
+        self.prev_write_size += data.len();
+        // todo 存储写入的位置
+        //start_offset::write(self.prev_write_size as u64);
+    }
+
+    /// 当前commit_log文件已满，开始创建新的文件
+    fn consume_queue_new_writer_create(&mut self) {
+        let curr = u64::from_str(self.file_name.as_str()).unwrap();
+        info!(
+            "当前 consume_queue 文件[{}]已满，开始创建新的文件",
+            self.file_name
+        );
+        // TODO 重置新文件读取的offset
+        //start_offset::write(0);
+
+        let new_name = format!(
+            "{number:>0width$}",
+            number = curr + CONFIG.consume_queue_file_size,
+            width = 20
+        );
+        let new_writer = Self::consume_queue_new(Some(new_name.as_str()),"",0);
+        self.new_writer_create(&new_name, new_writer);
+    }
+}
 
 #[allow(unused_variables)]
 fn writers_init() -> HashMap<String, ConsumeQueueWriter> {
