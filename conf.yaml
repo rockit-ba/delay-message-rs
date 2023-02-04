@@ -1,3 +1,4 @@
+port: 9997
 # commit_log 每个file的大小
 commit_log_file_size: 200
 

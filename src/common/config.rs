@@ -14,6 +14,7 @@ lazy_static! {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Config {
+    pub port: u32,
     /// commit_log 每个file的大小
     pub commit_log_file_size: u64,
     /// 最大延迟时间
