@@ -1,5 +1,6 @@
 //! 用于构建 commit_log 数据管理,加快消息消费
 
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::time::Duration;
 use lazy_static::lazy_static;
@@ -10,6 +11,7 @@ use tokio_stream::StreamExt;
 use tokio_util::time::DelayQueue;
 use crate::common::config::CONFIG;
 use crate::data_process_util::hashcode;
+use crate::file_util::{file_path, get_all_dirs};
 use crate::storage::message::Message;
 use crate::storage::mmap::MmapWriter;
 
@@ -20,10 +22,14 @@ const INIT_LOG_FILE_NAME: &str = "00000000000000000000";
 ///
 /// |consume_queue
 ///     |topic_test
-///         |filename  该索引文件暂不进行切分
+///         |filename
 const BASE_DIR_NAME: &str = "store/consume_queue";
 
 lazy_static! {
+    /// topic区分的writer key 就是 topic
+    static ref WRITERS: RwLock<HashMap<String, ConsumeQueueWriter>> = {
+        RwLock::new(writers_init())
+    };
     /// 存放延迟消息的队列
     static ref DELAY_QUEUE: RwLock<DelayQueue<QueueMessage>> = {
         let mut queue = DelayQueue::<QueueMessage>::with_capacity(1024);
@@ -56,6 +62,20 @@ lazy_static! {
 
 type ConsumeQueueWriter = MmapWriter;
 
+impl ConsumeQueueWriter {
+
+}
+
+#[allow(unused_variables)]
+fn writers_init() -> HashMap<String, ConsumeQueueWriter>{
+    let map = HashMap::<String, ConsumeQueueWriter>::with_capacity(1024);
+    let path = file_path(BASE_DIR_NAME);
+    get_all_dirs(&path).iter().for_each(|ele| {
+        let key = ele.file_name().to_str().unwrap().to_string();
+
+    });
+    map
+}
 // pub fn send(message: &Message){
 //     let (tx, rx) = spmc_channel();
 //     //

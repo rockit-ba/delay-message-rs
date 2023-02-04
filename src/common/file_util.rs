@@ -15,6 +15,17 @@ pub fn get_all_files(dir: &PathBuf) -> Vec<DirEntry> {
         .collect::<Vec<_>>()
 }
 
+/// 获取指定 PathBuf 下的所有文件夹
+///
+/// return Vec<DirEntry>
+pub fn get_all_dirs(dir: &PathBuf) -> Vec<DirEntry> {
+    read_dir(dir)
+        .unwrap()
+        .map(|f| f.unwrap())
+        .filter(|f| f.metadata().unwrap().is_dir())
+        .collect::<Vec<_>>()
+}
+
 /// 获取工作目录的文件夹
 pub fn file_path(dir_name: &str) -> PathBuf {
     let path = std::env::current_dir()
@@ -39,8 +50,10 @@ pub fn sorted_commit_log_files(dir_name: &str) -> Vec<DirEntry> {
 #[cfg(test)]
 
 mod tests {
+    use std::path::PathBuf;
     use crate::file_util;
     use std::str::FromStr;
+    use crate::file_util::get_all_dirs;
 
     #[test]
     fn test_get_all_files() {
@@ -58,7 +71,9 @@ mod tests {
 
     #[test]
     fn trans_test() {
-        let i = u64::from_str("0").unwrap();
-        println!("{i}")
+        let path = PathBuf::from_str("store/consume_queue").unwrap();
+        get_all_dirs(&path).iter().for_each(|e| {
+            println!("{:?}", e.file_name().as_os_str());
+        });
     }
 }

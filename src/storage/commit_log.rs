@@ -53,43 +53,22 @@ impl CommitLogWriter {
     pub fn instance() -> &'static mut CommitLogWriter {
         unsafe {
             if MMAP_WRITER.is_none() {
-                MMAP_WRITER = Some(CommitLogWriter::new(None));
+                MMAP_WRITER = Some(Self::self_new(None));
             }
             MMAP_WRITER.as_mut().unwrap()
         }
     }
     /// 创建实例
     ///
-    /// None 用于程序启动是自动初始化
-    ///
-    /// Some 用于程序运行过程中创建新的写文件
-    fn new(file_name: Option<&str>) -> CommitLogWriter {
-        let file_name_ = match file_name {
-            None => Self::file_name_create(INIT_LOG_FILE_NAME, DIR_NAME),
-            Some(file_name) => String::from(file_name),
-        };
-        info!("当前 write file name：{file_name_}");
-
-        let path = file_path(DIR_NAME).join(file_name_.as_str());
-        match OpenOptions::new().create(true).read(true).write(true).open(path)
-        {
-            Ok(file) => {
-                let offset = start_offset::read();
-                info!("从 start_offset 文件读取 START_OFFSET：{}", offset);
-                CommitLogWriter {
-                    prev_write_size: offset,
-                    file_name: file_name_,
-                    writer: Self::mmap_mut_create(&file,CONFIG.commit_log_file_size),
-                }
-            }
-            Err(err) => {
-                let err = MmapError::OpenErr(err.to_string());
-                panic(err.to_string().as_str())
-            }
-        }
+    fn self_new(file_name: Option<&str>) -> Self{
+        Self::new(
+            file_name,
+            INIT_LOG_FILE_NAME,
+            DIR_NAME,
+            start_offset::read(),
+            CONFIG.commit_log_file_size
+        )
     }
-
-
 
     /// 写数据
     pub fn write(&mut self, data: &[u8]) {
@@ -115,7 +94,7 @@ impl CommitLogWriter {
         start_offset::write(0);
 
         let new_name = format!("{number:>0width$}", number = curr + CONFIG.commit_log_file_size, width = 20);
-        let new_writer = Self::new(Some(new_name.as_str()));
+        let new_writer = Self::self_new(Some(new_name.as_str()));
         // 还原当前文件参数
         self.prev_write_size = 0;
         self.file_name = new_name;

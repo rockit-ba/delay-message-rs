@@ -1,10 +1,10 @@
 //! 内存映射相关
 
-use std::fs::{File};
+use std::fs::{File, OpenOptions};
+use log::info;
 use memmap2::{MmapMut, MmapOptions};
 use crate::cust_error::{MmapError, panic};
-use crate::file_util::sorted_commit_log_files;
-
+use crate::file_util::{file_path, sorted_commit_log_files};
 
 pub struct MmapWriter {
     /// 保存上次写的位置，以便追加写入，初始从 start_offset 文件中读取
@@ -13,6 +13,37 @@ pub struct MmapWriter {
     pub writer: MmapMut,
 }
 impl MmapWriter {
+    /// None 用于程序启动是自动初始化
+    ///
+    /// Some 用于程序运行过程中创建新的写文件
+    pub fn new(file_name: Option<&str>,
+               init_file_name: &str,
+               dir_name: &str,
+               offset: usize,
+               mmap_len: u64) -> Self {
+        let file_name_ = match file_name {
+            None => Self::file_name_create(init_file_name, dir_name),
+            Some(file_name) => String::from(file_name),
+        };
+        info!("当前 write file name：{file_name_}");
+
+        let path = file_path(dir_name).join(file_name_.as_str());
+        match OpenOptions::new().create(true).read(true).write(true).open(path)
+        {
+            Ok(file) => {
+                info!("读取 START_OFFSET：{}", offset);
+                Self {
+                    prev_write_size: offset,
+                    file_name: file_name_,
+                    writer: Self::mmap_mut_create(&file,mmap_len),
+                }
+            }
+            Err(err) => {
+                let err = MmapError::OpenErr(err.to_string());
+                panic(err.to_string().as_str())
+            }
+        }
+    }
     /// 创建 MmapMut
     pub fn mmap_mut_create(file: &File, mmap_len: u64) -> MmapMut {
         if let Err(err) = file.set_len(mmap_len) {
