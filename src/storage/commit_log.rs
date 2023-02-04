@@ -63,7 +63,7 @@ impl CommitLogWriter {
             file_name,
             INIT_LOG_FILE_NAME,
             DIR_NAME,
-            start_offset::read(),
+            Some(start_offset::read()),
             CONFIG.commit_log_file_size,
         )
     }

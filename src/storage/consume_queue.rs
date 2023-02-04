@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::str::FromStr;
 use std::time::Duration;
+use byteorder::{LittleEndian, WriteBytesExt};
 use tokio::sync::watch::{Receiver, Sender};
 use tokio::sync::{watch, RwLock};
 use tokio_stream::StreamExt;
@@ -65,12 +66,12 @@ type ConsumeQueueWriter = MmapWriter;
 impl ConsumeQueueWriter {
     /// 创建当前的实例
     /// dir_name 是base_dir_name/topic
-    fn consume_queue_new(file_name: Option<&str>, dir_name: &str, start_offset: usize) -> Self {
+    fn consume_queue_new(file_name: Option<&str>, dir_name: &str) -> Self {
         Self::new(
             file_name,
             INIT_LOG_FILE_NAME,
             dir_name,
-            start_offset,
+            None,
             CONFIG.consume_queue_file_size,
         )
     }
@@ -85,15 +86,18 @@ impl ConsumeQueueWriter {
             buf.len(),
             data.len()
         );
-        if buf.len() < data.len() {
+        // 这里-8的原因是最后8个字节存储当前写入的位置
+        if buf.len()-8 < data.len() {
             self.consume_queue_new_writer_create();
             self.consume_queue_write(data);
             return;
         }
         buf.write_all(data).unwrap();
         self.prev_write_size += data.len();
-        // todo 存储写入的位置
-        //start_offset::write(self.prev_write_size as u64);
+        // 存储写入的位置
+        let end = buf.len()-8;
+        let mut start_offset_buf = &mut buf[end..];
+        start_offset_buf.write_u64::<LittleEndian>(self.prev_write_size as u64).unwrap();
     }
 
     /// 当前commit_log文件已满，开始创建新的文件
@@ -103,15 +107,13 @@ impl ConsumeQueueWriter {
             "当前 consume_queue 文件[{}]已满，开始创建新的文件",
             self.file_name
         );
-        // TODO 重置新文件读取的offset
-        //start_offset::write(0);
 
         let new_name = format!(
             "{number:>0width$}",
             number = curr + CONFIG.consume_queue_file_size,
             width = 20
         );
-        let new_writer = Self::consume_queue_new(Some(new_name.as_str()),"",0);
+        let new_writer = Self::consume_queue_new(Some(new_name.as_str()),"");
         self.new_writer_create(&new_name, new_writer);
     }
 }

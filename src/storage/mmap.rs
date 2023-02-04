@@ -2,9 +2,12 @@
 
 use crate::cust_error::{panic, MmapError};
 use crate::file_util::{file_path, sorted_commit_log_files};
-use log::info;
+use log::{error, info, warn};
 use memmap2::{MmapMut, MmapOptions};
 use std::fs::{File, OpenOptions};
+use std::io::{Cursor, Seek, SeekFrom};
+use std::ops::DerefMut;
+use byteorder::{LittleEndian, ReadBytesExt};
 
 pub struct MmapWriter {
     /// 保存上次写的位置，以便追加写入，初始从 start_offset 文件中读取
@@ -20,7 +23,7 @@ impl MmapWriter {
         file_name: Option<&str>,
         init_file_name: &str,
         dir_name: &str,
-        offset: usize,
+        offset: Option<usize>,
         mmap_len: u64,
     ) -> Self {
         let file_name_ = match file_name {
@@ -37,11 +40,13 @@ impl MmapWriter {
             .open(path)
         {
             Ok(file) => {
+                let mut writer = Self::mmap_mut_create(&file, mmap_len);
+                let offset = Self::start_offset_process(offset, &mut writer);
                 info!("读取 START_OFFSET：{}", offset);
                 Self {
                     prev_write_size: offset,
                     file_name: file_name_,
-                    writer: Self::mmap_mut_create(&file, mmap_len),
+                    writer,
                 }
             }
             Err(err) => {
@@ -49,6 +54,24 @@ impl MmapWriter {
                 panic(err.to_string().as_str())
             }
         }
+    }
+
+    fn start_offset_process(offset: Option<usize>, writer: &mut MmapMut) -> usize {
+        let offset = match offset {
+            None => {
+                // 表明是consume_queue已经存在的文件，从文件末尾8个字节读出offset
+                warn!("consume_queue 文件 开始获取 start_offset");
+                let mut reader = Cursor::new(writer.deref_mut());
+                reader.seek(SeekFrom::End(-8)).unwrap();
+                let offset = reader.read_u64::<LittleEndian>().unwrap_or_else(|err| {
+                    error!("读取 start_offset 错误 \n{:?},返回默认 0", err);
+                    0_u64
+                });
+                offset as usize
+            }
+            Some(ele) => { ele }
+        };
+        offset
     }
     /// 创建 MmapMut
     pub fn mmap_mut_create(file: &File, mmap_len: u64) -> MmapMut {

@@ -11,8 +11,7 @@ use std::ops::DerefMut;
 use crate::storage::mmap::MmapWriter;
 use memmap2::MmapMut;
 
-/// 持久化间隔，单位秒
-const INTERVAL: u64 = 5;
+
 /// 存储文件名
 const START_OFFSET_FILE: &str = "start_offset";
 /// 存储映射引用
