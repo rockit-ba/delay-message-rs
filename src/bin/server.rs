@@ -1,8 +1,10 @@
 use log::info;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
+use delay_message_rs::commit_log;
 use delay_message_rs::consume_queue;
 use delay_message_rs::log_util::log_init;
+use delay_message_rs::message::Message;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>>{
@@ -10,6 +12,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>{
     // 开始初始化延迟消息
     info!("开始初始化延迟消息-->");
     consume_queue::init().await;
+
+    let commit_log_rx = commit_log::mpsc_channel();
+    let first = commit_log_rx.clone();
+    tokio::spawn(async move {
+        let json = String::from("{\"msg_len\":66,\"body_crc\":342342,\"physical_offset\":0,\"send_timestamp\":1232432443,\"store_timestamp\":1232432999,\"body_len\":21,\"body\":\"此情可待成追忆\",\"topic_len\":9,\"topic\":\"topic_oms\",\"prop_len\":0,\"prop\":\"\"}");
+        let message = Message::deserialize_json(&json);
+        first.send(message).expect("消息发送通道失败");
+    });
 
     info!("开始监听-->");
     let listener = TcpListener::bind("127.0.0.1:9999").await?;

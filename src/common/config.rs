@@ -4,6 +4,7 @@ use std::fs::File;
 use lazy_static::lazy_static;
 use serde::{Serialize, Deserialize};
 
+/// 配置文件路径
 const CONF_PATH: &str = "conf.yaml";
 
 lazy_static! {

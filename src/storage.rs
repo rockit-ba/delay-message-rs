@@ -1,5 +1,5 @@
 pub mod commit_log;
 pub mod consume_queue;
-mod message;
+pub mod message;
 mod start_offset;
 mod mmap;

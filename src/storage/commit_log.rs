@@ -13,7 +13,10 @@ use crate::storage::start_offset;
 
 use lazy_static::lazy_static;
 use log::{error, info};
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::UnboundedSender;
 use crate::common::config::CONFIG;
+use crate::storage::message::Message;
 use crate::storage::mmap::mmap_mut_create;
 
 /// 第一个存储文件的名称
@@ -27,10 +30,23 @@ lazy_static! {
     static ref MMAP_READERS: Vec<MmapReader> = MmapReader::init_readers();
 }
 
+/// 创建 mpsc 写入通道，返回发送者
+pub fn mpsc_channel() -> UnboundedSender<Message>{
+    let (tx,mut rx) = mpsc::unbounded_channel::<Message>();
+    tokio::spawn(async move {
+        info!("commit_log write 监听初始化");
+        while let Some(ele) = rx.recv().await {
+            info!("收到 写入消息 {ele:?}");
+            MmapWriter::instance().write(ele.serialize_binary().as_slice());
+        }
+    });
+    tx
+}
+
 /// commit_log 写对象
 ///
 /// 此对象利用mpsc进行操作，因为避免写入时使用锁竞争
-pub struct MmapWriter {
+struct MmapWriter {
     /// 保存上次写的位置，以便追加写入，初始从 start_offset 文件中读取
     prev_write_size: usize,
     file_name: String,
