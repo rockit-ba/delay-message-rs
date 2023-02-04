@@ -20,7 +20,8 @@ impl MmapWriter {
                init_file_name: &str,
                dir_name: &str,
                offset: usize,
-               mmap_len: u64) -> Self {
+               mmap_len: u64) -> Self
+    {
         let file_name_ = match file_name {
             None => Self::file_name_create(init_file_name, dir_name),
             Some(file_name) => String::from(file_name),
@@ -68,6 +69,14 @@ impl MmapWriter {
             .map(|file| file.file_name().to_str().unwrap().to_string())
             .last()
             .unwrap_or(init_file_name.to_string())
+    }
+
+
+    /// // 还原当前文件参数
+    pub fn new_writer_create(&mut self, new_name: &str, new_writer: Self) {
+        self.prev_write_size = 0;
+        self.file_name = String::from(new_name);
+        self.writer = new_writer.writer;
     }
 }
 

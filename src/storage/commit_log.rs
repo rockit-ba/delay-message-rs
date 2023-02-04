@@ -58,8 +58,7 @@ impl CommitLogWriter {
             MMAP_WRITER.as_mut().unwrap()
         }
     }
-    /// 创建实例
-    ///
+    /// 创建当前的实例
     fn self_new(file_name: Option<&str>) -> Self{
         Self::new(
             file_name,
@@ -82,12 +81,12 @@ impl CommitLogWriter {
             return;
         }
 
-        self.new_writer_create();
+        self.self_new_writer_create();
         self.write(data);
     }
 
     /// 当前commit_log文件已满，开始创建新的文件
-    fn new_writer_create(&mut self) {
+    fn self_new_writer_create(&mut self) {
         let curr = u64::from_str(self.file_name.as_str()).unwrap();
         info!("当前commit_log文件[{}]已满，开始创建新的文件", self.file_name);
         // TODO 新文件还原为0，这里要可能需要兼容
@@ -95,11 +94,7 @@ impl CommitLogWriter {
 
         let new_name = format!("{number:>0width$}", number = curr + CONFIG.commit_log_file_size, width = 20);
         let new_writer = Self::self_new(Some(new_name.as_str()));
-        // 还原当前文件参数
-        self.prev_write_size = 0;
-        self.file_name = new_name;
-        self.writer = new_writer.writer;
-
+        self.new_writer_create(&new_name, new_writer);
     }
 
 }
