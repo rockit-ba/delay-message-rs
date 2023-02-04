@@ -71,25 +71,23 @@ impl CommitLogWriter {
 
     /// 写数据
     pub fn write(&mut self, data: &[u8]) {
-        let mut m_mut = &mut self.writer[self.prev_write_size..];
+        let mut buf = &mut self.writer[self.prev_write_size..];
 
-        info!("当前文件[{}]剩余：{},当前数据大小：{}", self.file_name, m_mut.len(), data.len());
-        if m_mut.len() > data.len() {
-            m_mut.write_all(data).unwrap();
-            self.prev_write_size += data.len();
-            start_offset::write(self.prev_write_size as u64);
+        info!("当前文件[{}]剩余：{},当前数据大小：{}", self.file_name, buf.len(), data.len());
+        if buf.len() < data.len() {
+            self.self_new_writer_create();
+            self.write(data);
             return;
         }
-
-        self.self_new_writer_create();
-        self.write(data);
+        buf.write_all(data).unwrap();
+        self.prev_write_size += data.len();
+        start_offset::write(self.prev_write_size as u64);
     }
 
     /// 当前commit_log文件已满，开始创建新的文件
     fn self_new_writer_create(&mut self) {
         let curr = u64::from_str(self.file_name.as_str()).unwrap();
         info!("当前commit_log文件[{}]已满，开始创建新的文件", self.file_name);
-        // TODO 新文件还原为0，这里要可能需要兼容
         start_offset::write(0);
 
         let new_name = format!("{number:>0width$}", number = curr + CONFIG.commit_log_file_size, width = 20);

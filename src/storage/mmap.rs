@@ -71,7 +71,6 @@ impl MmapWriter {
             .unwrap_or(init_file_name.to_string())
     }
 
-
     /// // 还原当前文件参数
     pub fn new_writer_create(&mut self, new_name: &str, new_writer: Self) {
         self.prev_write_size = 0;
