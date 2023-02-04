@@ -20,12 +20,16 @@ use crate::storage::mmap::mmap_mut_create;
 const INIT_LOG_FILE_NAME: &str = "00000000000000000000";
 /// 文件存储目录
 const DIR_NAME: &str = "store/commit_log";
+/// 存储映射引用
+static mut MMAP_WRITER: Option<MmapWriter> = None;
 
 lazy_static! {
     static ref MMAP_READERS: Vec<MmapReader> = MmapReader::init_readers();
 }
 
 /// commit_log 写对象
+///
+/// 此对象利用mpsc进行操作，因为避免写入时使用锁竞争
 pub struct MmapWriter {
     /// 保存上次写的位置，以便追加写入，初始从 start_offset 文件中读取
     prev_write_size: usize,
@@ -33,6 +37,15 @@ pub struct MmapWriter {
     writer: MmapMut,
 }
 impl MmapWriter {
+    /// 单例获取 START_OFFSET
+    pub fn instance() -> &'static mut MmapWriter {
+        unsafe {
+            if MMAP_WRITER.is_none() {
+                MMAP_WRITER = Some(MmapWriter::new(None));
+            }
+            MMAP_WRITER.as_mut().unwrap()
+        }
+    }
     /// 创建实例
     ///
     /// None 用于程序启动是自动初始化
@@ -216,7 +229,7 @@ mod tests {
     #[test]
     fn test_01_write_message() {
         log_init();
-        let mut writer = MmapWriter::new(None);
+        let writer = MmapWriter::instance();
         let json = String::from("{\"msg_len\":66,\"body_crc\":342342,\"physical_offset\":0,\"send_timestamp\":1232432443,\"store_timestamp\":1232432999,\"body_len\":21,\"body\":\"此情可待成追忆\",\"topic_len\":9,\"topic\":\"topic_oms\",\"prop_len\":0,\"prop\":\"\"}");
         let message = Message::deserialize_json(&json).serialize_binary();
         let x = message.as_slice();

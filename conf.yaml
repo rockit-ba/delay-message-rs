@@ -1,4 +1,7 @@
+# commit_log 每个file的大小
 commit_log_file_size: 200
 
-max_delay_time: 31_536_000
+# 最久一年
+max_delay_time: 31536000
+# consume_queue 每个file的大小
 consume_queue_file_size: 200
