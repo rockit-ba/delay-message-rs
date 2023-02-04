@@ -9,7 +9,7 @@ use std::io::Cursor;
 use std::ops::{DerefMut};
 
 use memmap2::{MmapMut};
-use crate::storage::mmap::mmap_mut_create;
+use crate::storage::mmap::MmapWriter;
 
 
 /// 持久化间隔，单位秒
@@ -27,7 +27,7 @@ fn instance() -> &'static mut MmapMut {
                 .create(true).write(true).read(true)
                 .open(START_OFFSET_FILE)
                 .expect("打开 start_offset 存储文件失败");
-            START_OFFSET = Some(mmap_mut_create(&file, 8));
+            START_OFFSET = Some(MmapWriter::mmap_mut_create(&file, 8));
         }
         START_OFFSET.as_mut().unwrap()
     }

@@ -11,7 +11,7 @@ use std::time::SystemTime;
 /// 根据 读取 一个 u32 的msg_len，然后 读取msg_len长度字节的数据
 ///
 /// 定位一个消息在文件中的起始位置：physical_offset
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Message {
     /// 消息总长度 4，不包括自身的4字节
     msg_len: u32,

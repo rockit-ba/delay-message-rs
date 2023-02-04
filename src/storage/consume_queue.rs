@@ -5,12 +5,13 @@ use std::time::Duration;
 use lazy_static::lazy_static;
 use log::{info, warn};
 use tokio::sync::{RwLock, watch};
-use tokio::sync::watch::{Sender};
+use tokio::sync::watch::{Receiver, Sender};
 use tokio_stream::StreamExt;
 use tokio_util::time::DelayQueue;
 use crate::common::config::CONFIG;
 use crate::data_process_util::hashcode;
 use crate::storage::message::Message;
+use crate::storage::mmap::MmapWriter;
 
 
 /// 第一个存储文件的名称
@@ -51,6 +52,33 @@ lazy_static! {
         tx
     };
 
+}
+
+type ConsumeQueueWriter = MmapWriter;
+
+// pub fn send(message: &Message){
+//     let (tx, rx) = spmc_channel();
+//     //
+//
+// }
+
+/// 最优的可能是spsc,但是那样可能会相对复杂，
+///
+/// 把消息是否处理放在了发送端，因此每次发送消息的时候需要找到对应的发送者
+///
+/// spmc简单一些，因为事实上不会有过多的topic
+fn spmc_channel() -> (Sender<Message>, Receiver<Message>) {
+    // 注意，这里的
+    let (tx, rx) = watch::channel(Message::default());
+    let b = rx.clone();
+    // 根据消息topic 查询是否有对应的receiver，如果没有则创建
+    let mut a = rx.clone();
+    tokio::spawn(async move {
+        while a.changed().await.is_ok() {
+            info!("topic xx 收到持久化 consume_queue的消息 ： {:?}", *rx.borrow());
+        }
+    });
+    (tx,b)
 }
 
 /// commit_log 索引数据

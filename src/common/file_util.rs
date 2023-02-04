@@ -1,7 +1,9 @@
 //! 操作file 的快捷工具类
 
-use std::fs::{read_dir, DirEntry};
+use std::fs::{read_dir, DirEntry, create_dir_all};
 use std::path::PathBuf;
+use log::error;
+use crate::cust_error::panic;
 
 /// 获取指定 PathBuf 下的所有文件
 ///
@@ -11,6 +13,27 @@ pub fn get_all_files(dir: &PathBuf) -> Vec<DirEntry> {
         .unwrap()
         .map(|f| f.unwrap())
         .collect::<Vec<_>>()
+}
+
+/// 获取工作目录的文件夹
+pub fn file_path(dir_name: &str) -> PathBuf {
+    let path = std::env::current_dir()
+        .expect("获取应用目录异常")
+        .join(dir_name);
+    if !path.exists() {
+        if let Err(e) = create_dir_all(&path) {
+            error!("创建文件路径失败：{:?}",e);
+            panic(e.to_string().as_str())
+        }
+    }
+    path
+}
+
+/// 获取 排序后的 files
+pub fn sorted_commit_log_files(dir_name: &str) -> Vec<DirEntry> {
+    let mut files = get_all_files(&file_path(dir_name));
+    files.sort_by_key(|file| file.file_name());
+    files
 }
 
 #[cfg(test)]
