@@ -1,21 +1,20 @@
 //! commit_log 文件模块
 
-
-use memmap2::{Mmap, MmapOptions};
-use std::fs::{DirEntry, OpenOptions};
-use std::io::{Write};
-use std::str::FromStr;
 use crate::cust_error::{panic, MmapError};
 use crate::storage::start_offset;
+use memmap2::{Mmap, MmapOptions};
+use std::fs::{DirEntry, OpenOptions};
+use std::io::Write;
+use std::str::FromStr;
 
-use lazy_static::lazy_static;
-use log::{info};
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::UnboundedSender;
 use crate::common::config::CONFIG;
 use crate::file_util::{file_path, sorted_commit_log_files};
 use crate::storage::message::Message;
-use crate::storage::mmap::{MmapWriter};
+use crate::storage::mmap::MmapWriter;
+use lazy_static::lazy_static;
+use log::info;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::UnboundedSender;
 
 /// 第一个存储文件的名称
 const INIT_LOG_FILE_NAME: &str = "00000000000000000000";
@@ -29,8 +28,8 @@ lazy_static! {
 }
 
 /// 创建 mpsc 写入通道，返回发送者
-pub fn mpsc_channel() -> UnboundedSender<Message>{
-    let (tx,mut rx) = mpsc::unbounded_channel::<Message>();
+pub fn mpsc_channel() -> UnboundedSender<Message> {
+    let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
     tokio::spawn(async move {
         info!("commit_log write 监听初始化");
         while let Some(ele) = rx.recv().await {
@@ -59,13 +58,13 @@ impl CommitLogWriter {
         }
     }
     /// 创建当前的实例
-    fn self_new(file_name: Option<&str>) -> Self{
+    fn self_new(file_name: Option<&str>) -> Self {
         Self::new(
             file_name,
             INIT_LOG_FILE_NAME,
             DIR_NAME,
             start_offset::read(),
-            CONFIG.commit_log_file_size
+            CONFIG.commit_log_file_size,
         )
     }
 
@@ -73,7 +72,12 @@ impl CommitLogWriter {
     pub fn write(&mut self, data: &[u8]) {
         let mut buf = &mut self.writer[self.prev_write_size..];
 
-        info!("当前文件[{}]剩余：{},当前数据大小：{}", self.file_name, buf.len(), data.len());
+        info!(
+            "当前文件[{}]剩余：{},当前数据大小：{}",
+            self.file_name,
+            buf.len(),
+            data.len()
+        );
         if buf.len() < data.len() {
             self.self_new_writer_create();
             self.write(data);
@@ -87,16 +91,21 @@ impl CommitLogWriter {
     /// 当前commit_log文件已满，开始创建新的文件
     fn self_new_writer_create(&mut self) {
         let curr = u64::from_str(self.file_name.as_str()).unwrap();
-        info!("当前commit_log文件[{}]已满，开始创建新的文件", self.file_name);
+        info!(
+            "当前commit_log文件[{}]已满，开始创建新的文件",
+            self.file_name
+        );
         start_offset::write(0);
 
-        let new_name = format!("{number:>0width$}", number = curr + CONFIG.commit_log_file_size, width = 20);
+        let new_name = format!(
+            "{number:>0width$}",
+            number = curr + CONFIG.commit_log_file_size,
+            width = 20
+        );
         let new_writer = Self::self_new(Some(new_name.as_str()));
         self.new_writer_create(&new_name, new_writer);
     }
-
 }
-
 
 /// commit_log read 对象
 pub struct MmapReader {
@@ -106,7 +115,10 @@ pub struct MmapReader {
 impl MmapReader {
     /// 创建
     fn new(file_name: &str, reader: Mmap) -> MmapReader {
-        MmapReader { file_name: file_name.to_string(), reader }
+        MmapReader {
+            file_name: file_name.to_string(),
+            reader,
+        }
     }
     /// 初始化所有 commit_log 文件的读取对象
     fn init_readers() -> Vec<MmapReader> {
@@ -114,8 +126,7 @@ impl MmapReader {
         let mut vec = Vec::<MmapReader>::new();
         if log_files.is_empty() {
             Self::empty_reader_process(&mut vec);
-        }
-        else {
+        } else {
             Self::not_empty_reader_process(log_files, &mut vec);
         }
         vec
@@ -125,11 +136,11 @@ impl MmapReader {
     fn not_empty_reader_process(log_files: Vec<DirEntry>, vec: &mut Vec<MmapReader>) {
         log_files.iter().for_each(|ele| {
             let path = file_path(DIR_NAME).join(ele.file_name().to_str().unwrap());
-            match OpenOptions::new().read(true).open(path)
-            {
+            match OpenOptions::new().read(true).open(path) {
                 Ok(file) => {
-                    let ele = Self::new(ele.file_name().to_str().unwrap(),
-                                        unsafe { MmapOptions::new().map(&file).unwrap() });
+                    let ele = Self::new(ele.file_name().to_str().unwrap(), unsafe {
+                        MmapOptions::new().map(&file).unwrap()
+                    });
                     vec.push(ele);
                 }
                 Err(err) => {
@@ -143,12 +154,11 @@ impl MmapReader {
     /// 如果目录中log 文件为空时的处理
     fn empty_reader_process(vec: &mut Vec<MmapReader>) {
         let path = file_path(DIR_NAME).join(INIT_LOG_FILE_NAME);
-        match OpenOptions::new().create(true).read(true).open(path)
-        {
+        match OpenOptions::new().create(true).read(true).open(path) {
             Ok(file) => {
-                vec.push(Self::new(INIT_LOG_FILE_NAME,
-                                   unsafe { MmapOptions::new().map(&file).unwrap() }
-                ));
+                vec.push(Self::new(INIT_LOG_FILE_NAME, unsafe {
+                    MmapOptions::new().map(&file).unwrap()
+                }));
             }
             Err(err) => {
                 let err = MmapError::OpenErr(err.to_string());
@@ -164,7 +174,7 @@ impl MmapReader {
     /// size    读取的长度
     pub fn read(offset: u64, size: u32) -> Vec<u8> {
         // commit log 文件索引
-        let index = (offset / CONFIG.commit_log_file_size) as usize ;
+        let index = (offset / CONFIG.commit_log_file_size) as usize;
         let reader = MMAP_READERS.get(index).unwrap();
 
         let start = offset as usize;
@@ -174,19 +184,13 @@ impl MmapReader {
     }
 }
 
-
-
-
-
-
-
 #[cfg(test)]
 
 mod tests {
-    use crossbeam::atomic::AtomicCell;
     use crate::common::log_util::log_init;
     use crate::storage::commit_log::CommitLogWriter;
     use crate::storage::message::Message;
+    use crossbeam::atomic::AtomicCell;
 
     #[test]
     fn test_01_write_message() {

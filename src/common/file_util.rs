@@ -1,9 +1,9 @@
 //! 操作file 的快捷工具类
 
-use std::fs::{read_dir, DirEntry, create_dir_all};
-use std::path::PathBuf;
-use log::error;
 use crate::cust_error::panic;
+use log::error;
+use std::fs::{create_dir_all, read_dir, DirEntry};
+use std::path::PathBuf;
 
 /// 获取指定 PathBuf 下的所有文件
 ///
@@ -33,7 +33,7 @@ pub fn file_path(dir_name: &str) -> PathBuf {
         .join(dir_name);
     if !path.exists() {
         if let Err(e) = create_dir_all(&path) {
-            error!("创建文件路径失败：{:?}",e);
+            error!("创建文件路径失败：{:?}", e);
             panic(e.to_string().as_str())
         }
     }
@@ -50,10 +50,10 @@ pub fn sorted_commit_log_files(dir_name: &str) -> Vec<DirEntry> {
 #[cfg(test)]
 
 mod tests {
-    use std::path::PathBuf;
     use crate::file_util;
-    use std::str::FromStr;
     use crate::file_util::get_all_dirs;
+    use std::path::PathBuf;
+    use std::str::FromStr;
 
     #[test]
     fn test_get_all_files() {

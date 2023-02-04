@@ -1,8 +1,8 @@
 //! crc 32 校验和工具
 
+use crc::{Crc, CRC_32_CKSUM};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use crc::{Crc, CRC_32_CKSUM};
 
 const CRC_CKSUM: Crc<u32> = Crc::<u32>::new(&CRC_32_CKSUM);
 

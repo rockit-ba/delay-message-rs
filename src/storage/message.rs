@@ -66,7 +66,13 @@ impl Message {
         v.extend(crc32(self.body.as_bytes()).to_le_bytes());
         v.extend(self.physical_offset.to_le_bytes());
         v.extend(self.send_timestamp.to_le_bytes());
-        v.extend(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs().to_le_bytes());
+        v.extend(
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                .to_le_bytes(),
+        );
 
         v.extend(self.body_len.to_le_bytes());
         v.extend(self.body.as_bytes());
@@ -136,10 +142,10 @@ impl Message {
 
 #[cfg(test)]
 mod tests {
-    use std::time::SystemTime;
     use crate::common::log_util::log_init;
     use crate::storage::message::Message;
     use log::info;
+    use std::time::SystemTime;
 
     #[test]
     fn test_json() {
@@ -154,7 +160,10 @@ mod tests {
 
     #[test]
     fn test_word_len() {
-        let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
+        let timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
         println!("timestamp: {timestamp}");
     }
 

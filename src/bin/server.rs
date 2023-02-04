@@ -1,13 +1,13 @@
-use log::info;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpListener;
 use delay_message_rs::commit_log;
 use delay_message_rs::consume_queue;
 use delay_message_rs::log_util::log_init;
 use delay_message_rs::message::Message;
+use log::info;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>>{
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log_init();
     // 开始初始化延迟消息
     info!("开始初始化延迟消息-->");
@@ -44,12 +44,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>{
 
                 // Write the data back
                 if let Err(e) = socket.write_all(&buf[0..n]).await {
-                    eprintln!("failed to write to socket; err = {e}" );
+                    eprintln!("failed to write to socket; err = {e}");
                     return;
                 }
             }
         });
     }
 }
-
-

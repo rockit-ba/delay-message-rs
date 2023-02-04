@@ -1,20 +1,19 @@
 //! 用于构建 commit_log 数据管理,加快消息消费
 
-use std::collections::HashMap;
-use std::str::FromStr;
-use std::time::Duration;
-use lazy_static::lazy_static;
-use log::{info, warn};
-use tokio::sync::{RwLock, watch};
-use tokio::sync::watch::{Receiver, Sender};
-use tokio_stream::StreamExt;
-use tokio_util::time::DelayQueue;
 use crate::common::config::CONFIG;
 use crate::data_process_util::hashcode;
 use crate::file_util::{file_path, get_all_dirs};
 use crate::storage::message::Message;
 use crate::storage::mmap::MmapWriter;
-
+use lazy_static::lazy_static;
+use log::{info, warn};
+use std::collections::HashMap;
+use std::str::FromStr;
+use std::time::Duration;
+use tokio::sync::watch::{Receiver, Sender};
+use tokio::sync::{watch, RwLock};
+use tokio_stream::StreamExt;
+use tokio_util::time::DelayQueue;
 
 /// 第一个存储文件的名称
 const INIT_LOG_FILE_NAME: &str = "00000000000000000000";
@@ -62,17 +61,14 @@ lazy_static! {
 
 type ConsumeQueueWriter = MmapWriter;
 
-impl ConsumeQueueWriter {
-
-}
+impl ConsumeQueueWriter {}
 
 #[allow(unused_variables)]
-fn writers_init() -> HashMap<String, ConsumeQueueWriter>{
+fn writers_init() -> HashMap<String, ConsumeQueueWriter> {
     let map = HashMap::<String, ConsumeQueueWriter>::with_capacity(1024);
     let path = file_path(BASE_DIR_NAME);
     get_all_dirs(&path).iter().for_each(|ele| {
         let key = ele.file_name().to_str().unwrap().to_string();
-
     });
     map
 }
@@ -95,14 +91,17 @@ fn spmc_channel() -> (Sender<Message>, Receiver<Message>) {
     let mut a = rx.clone();
     tokio::spawn(async move {
         while a.changed().await.is_ok() {
-            info!("topic xx 收到持久化 consume_queue的消息 ： {:?}", *rx.borrow());
+            info!(
+                "topic xx 收到持久化 consume_queue的消息 ： {:?}",
+                *rx.borrow()
+            );
         }
     });
-    (tx,b)
+    (tx, b)
 }
 
 /// commit_log 索引数据
-#[derive(Debug,Clone,Default)]
+#[derive(Debug, Clone, Default)]
 pub struct QueueMessage {
     // commit_log 物理偏移量 8
     physical_offset: u64,
@@ -111,7 +110,7 @@ pub struct QueueMessage {
     // tag  的hash_code 8
     tag_hashcode: u64,
     // 最长支持一年  31_536_000  秒 4
-    pub delay_time : u32,
+    pub delay_time: u32,
 }
 impl QueueMessage {
     /// 定长长度 1G 内存可以存储 4473_9242条数据
@@ -121,11 +120,13 @@ impl QueueMessage {
     /// 根据 commit_log message 构建一个 QueueMessage
     pub fn from_message(message: &Message) -> (Self, Duration) {
         let prop = message.prop.clone();
-        let delay_time =  prop.split('-').collect::<Vec<_>>();
-        QueueMessage::new(message.physical_offset,
-                          message.msg_len(),
-                          &message.topic,
-                          u32::from_str(delay_time.get(1).unwrap()).unwrap())
+        let delay_time = prop.split('-').collect::<Vec<_>>();
+        QueueMessage::new(
+            message.physical_offset,
+            message.msg_len(),
+            &message.topic,
+            u32::from_str(delay_time.get(1).unwrap()).unwrap(),
+        )
     }
 
     ///  创建消息
@@ -180,14 +181,14 @@ async fn init_message() {
 
 /// 处理所有的延迟消息
 async fn process_message() {
-    tokio::spawn(async move{
+    tokio::spawn(async move {
         loop {
             let mut queue = DELAY_QUEUE.write().await;
             if let Some(ele) = queue.next().await {
                 // 在这里处理取出的元素
                 let msg = ele.get_ref();
                 if msg.is_block_message() {
-                    let (block,duration) = QueueMessage::block_message();
+                    let (block, duration) = QueueMessage::block_message();
                     warn!("无效阻塞消息消费：{msg:?}，将重新赋值：{block:?}");
                     queue.insert(block, duration);
                     return;
@@ -198,17 +199,11 @@ async fn process_message() {
             }
         }
     });
-
 }
-
-
-
 
 #[cfg(test)]
 mod tests {
 
     #[tokio::test]
-    async fn delay_queue() {
-
-    }
+    async fn delay_queue() {}
 }

@@ -2,15 +2,14 @@
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
-use log::{error};
-use std::fs::{OpenOptions};
-pub use std::io::{Write};
+use log::error;
+use std::fs::OpenOptions;
 use std::io::Cursor;
-use std::ops::{DerefMut};
+pub use std::io::Write;
+use std::ops::DerefMut;
 
-use memmap2::{MmapMut};
 use crate::storage::mmap::MmapWriter;
-
+use memmap2::MmapMut;
 
 /// 持久化间隔，单位秒
 const INTERVAL: u64 = 5;
@@ -24,7 +23,9 @@ fn instance() -> &'static mut MmapMut {
     unsafe {
         if START_OFFSET.is_none() {
             let file = OpenOptions::new()
-                .create(true).write(true).read(true)
+                .create(true)
+                .write(true)
+                .read(true)
                 .open(START_OFFSET_FILE)
                 .expect("打开 start_offset 存储文件失败");
             START_OFFSET = Some(MmapWriter::mmap_mut_create(&file, 8));
@@ -33,10 +34,11 @@ fn instance() -> &'static mut MmapMut {
     }
 }
 
-
 /// 持久化 start_offset
 pub fn write(offset: u64) {
-    instance().deref_mut().write_u64::<LittleEndian>(offset)
+    instance()
+        .deref_mut()
+        .write_u64::<LittleEndian>(offset)
         .unwrap_or_else(|err| {
             error!("持久化 start_offset 文件错误 \n{:?}", err);
         });
@@ -56,9 +58,8 @@ pub fn read() -> usize {
 
 mod tests {
     use crate::common::log_util::log_init;
-    use crate::storage::start_offset::{read};
+    use crate::storage::start_offset::read;
     use log::info;
-
 
     #[test]
     fn test_start_offset_read() {

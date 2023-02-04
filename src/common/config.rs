@@ -1,8 +1,8 @@
 //! 配置文件
 
-use std::fs::File;
 use lazy_static::lazy_static;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use std::fs::File;
 
 /// 配置文件路径
 const CONF_PATH: &str = "conf.yaml";
@@ -23,11 +23,10 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new() -> Self{
+    pub fn new() -> Self {
         let file = File::options().read(true).open(CONF_PATH).unwrap();
         serde_yaml::from_reader(&file).expect("初始化配置文件失败")
     }
-
 }
 
 #[cfg(test)]
