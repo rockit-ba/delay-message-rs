@@ -231,6 +231,7 @@ async fn init_message() {
     for r in 1..10 {
         let (task_01, duration1) = QueueMessage::new(r as u64, r as u32, "", r as u32);
         {
+            // TODO 注意，这个延迟队列不支持到某个时间点（时间戳形式）过期，因此，每次插入需要使用当前时间和时间戳进行计算延迟的时间段
             DELAY_QUEUE.write().await.insert(task_01, duration1);
         }
     }
